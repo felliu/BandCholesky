@@ -37,10 +37,9 @@ int par_dpbtrf(int mat_dim, int bandwidth, double* ab, int ldab) {
     nb = std::min(nb, nb_max);
 
     for (int i = 0; i < mat_dim; i += nb) {
-        std::cerr << "i: " << i << "\n";
         const int A11_width = std::min(nb, mat_dim - i);
         double* A11_start = ab + to_flat_index(ldab, 0, i);
-        std::cerr << "Processing A11...\n";
+
         //Factorize A11 into U11
         status = LAPACKE_dpotrf(LAPACK_COL_MAJOR, 'L', A11_width, A11_start, ldab - 1);
         if (status != 0)
@@ -53,11 +52,9 @@ int par_dpbtrf(int mat_dim, int bandwidth, double* ab, int ldab) {
             double* A22_start = ab + to_flat_index(ldab, 0, i + A11_width);
 
             if (A22_width > 0) {
-                std::cerr << "Processing A21...\n";
                 cblas_dtrsm(CblasColMajor, CblasRight, CblasLower, CblasTrans, CblasNonUnit,
                             A22_width, A11_width, 1.0, A11_start, ldab - 1, A21_start, ldab - 1);
 
-                std::cerr << "Processing A22...\n";
                 cblas_dsyrk(CblasColMajor, CblasLower, CblasNoTrans,
                             A22_width, A11_width, -1.0, A21_start,
                             ldab - 1, 1.0, A22_start, ldab - 1);
@@ -67,37 +64,32 @@ int par_dpbtrf(int mat_dim, int bandwidth, double* ab, int ldab) {
                 double* A32_start = ab + to_flat_index(ldab, bandwidth - A11_width, i + A11_width);
                 double* A33_start = ab + to_flat_index(ldab, 0, i + bandwidth);
                 //Copy the upper triangle of the A31 block into the temporary work array
-                std::cerr << "Copying A31...\n";
                 for (int j = 0; j < A11_width; ++j) {
                     for (int k = 0; k < std::min(j, A33_width); ++k) {
-                        work_arr[to_flat_index(ld_work_arr, j, k)] =
-                            *(ab + to_flat_index(ldab, bandwidth - j + k, j + i));
+                        work_arr[to_flat_index(ld_work_arr, k, j)] =
+                            *(ab + to_flat_index(ldab, bandwidth + 1 - j + k, j + i));
                     }
                 }
 
-                std::cerr << "Processing A31...\n";
                 cblas_dtrsm(CblasColMajor, CblasRight, CblasLower, CblasTrans, CblasNonUnit,
                             A33_width, A11_width, 1.0, A11_start, ldab - 1, &work_arr[0], ld_work_arr);
 
-                if (A22_width > 0) {
-                    std::cerr << "Processing A32...\n";
+                if (A22_width > 0)
                     cblas_dgemm(CblasColMajor, CblasNoTrans, CblasTrans,
                                 A33_width, A22_width, A11_width,
                                 -1.0, &work_arr[0], ld_work_arr,
                                 A21_start, ldab-1, 1.0,
                                 A32_start, ldab-1);
-                }
-                std::cerr << "Processing A33...\n";
+
                 cblas_dsyrk(CblasColMajor, CblasLower, CblasNoTrans,
                             A33_width, A11_width, -1.0, &work_arr[0], ld_work_arr,
                             1.0, A33_start, ldab-1);
 
-                std::cerr << "Copying A31 back...\n";
                 //Copy back from work array to A31 upper triangle.
                 for (int j = 0; j < A11_width; ++j) {
                     for (int k = 0; k < std::min(j, A33_width); ++k) {
-                        *(ab + to_flat_index(ldab, bandwidth - j + k, j + i)) =
-                            work_arr[to_flat_index(nb_max + 1, j, k)];
+                        *(ab + to_flat_index(ldab, bandwidth + 1 - j + k, j + i)) =
+                            work_arr[to_flat_index(ld_work_arr, k, j)];
                     }
                 }
             }

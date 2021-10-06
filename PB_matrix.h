@@ -8,7 +8,7 @@
 #include <vector>
 
 /*  Positive-definite symmetric band matrix.
-    Only stores upper triangular elements in row major order.
+    Only stores lower triangular elements in column major order.
 */
 template <typename ValueType>
 struct PB_matrix
@@ -34,9 +34,9 @@ PB_matrix<ValueType> read_pb_matrix(const std::string& path)
 }
 
 /*
-    Pads the flat data array with the symmetric band matrix elements to size num_rows x (bandwidth + 1)
-    This is done by storing each band of the matrix on its own row, and padding with zeroes for rows where the bands are less
-    than bandiwidth + 1 long.
+    Pads the flat data array with the symmetric band matrix elements to size (bandwidth + 1) x num_rows
+    This is done by storing each band of the matrix in its own column, and padding with zeroes for columns where the bands are less
+    than bandwidth + 1 long.
 
     Parameters:
     matrix - the matrix to pad (input/output parameter)

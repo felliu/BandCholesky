@@ -3,7 +3,47 @@
 
 #include <cassert>
 #include <iostream>
-#include <mkl.h>
+//#include <mkl.h>
+#include <lapacke.h>
+
+namespace {
+    /**
+     * Reads an array from a binary file. The file is stored as |sz|data|, where sz is an unsigned 64-bit int.
+     * If two template parameters are specified, the values in the output vector will be cast to type of the
+     * second template argument.
+     **/
+    template <typename ValueType, typename OutType = ValueType>
+    std::vector<OutType> read_binary_file(const std::string& path)
+    {
+        std::ifstream in_file(path, std::ios::in | std::ios::binary);
+        size_t sz;
+        in_file.read(reinterpret_cast<char*>(&sz), sizeof(sz));
+        std::vector<ValueType> data_in(sz);
+        in_file.read(reinterpret_cast<char*>(data_in.data()), sizeof(ValueType) * sz);
+        std::vector<OutType> out_vec;
+        out_vec.reserve(sz);
+
+        //Cast to the right output form. Not strictly necessary if U == T.
+        std::transform(data_in.cbegin(), data_in.cend(), std::back_inserter(out_vec),
+                    [](ValueType val){ return static_cast<OutType>(val); });
+
+        return out_vec;
+    }
+
+    template <typename T>
+    void dump_vector_to_file(const std::vector<T>& vec, const std::string& path, bool append=false)
+    {
+        std::ofstream outfile;
+        if (append)
+            outfile.open(path, std::ios::binary | std::ios::app);
+        else
+            outfile.open(path, std::ios::binary | std::ios::out);
+
+        size_t sz = vec.size();
+        outfile.write(reinterpret_cast<const char*>(&sz), sizeof(sz));
+        outfile.write(reinterpret_cast<const char*>(vec.data()), sizeof(T) * sz);
+    }
+}
 
 int main(int argc, char* argv[]) {
     if (argc != 2) {
@@ -15,6 +55,7 @@ int main(int argc, char* argv[]) {
     PB_matrix<double> mat = read_pb_matrix<double>(filename);
     pad_pb_matrix(mat);
     PB_matrix<double> mat_cpy(mat);
+
     std::cerr << "Rows: " << mat.bandwidth + 1 << "\n";
     std::cerr << "Columns: " << mat.size << "\n";
     std::cerr << "Data size: " << mat.data.size() << "\n";
@@ -23,14 +64,30 @@ int main(int argc, char* argv[]) {
                             static_cast<int>(mat.bandwidth + 1));
     std::cerr << "Status: " << status << "\n";
     assert(status == 0);
+
     status = LAPACKE_dpbtrf(LAPACK_COL_MAJOR, 'L', static_cast<int>(mat_cpy.size),
                             static_cast<int>(mat_cpy.bandwidth), &mat_cpy.data[0],
                             static_cast<int>(mat_cpy.bandwidth + 1));
     assert(status == 0);
+    double factorization_diff = 0.0;
+    double min_diff = 1e10;
+    double max_diff = -1e10;
+    for (size_t i = 0; i < mat.data.size(); ++i) {
+        double diff = std::abs(mat.data[i] - mat_cpy.data[i]);
+        factorization_diff += diff;
+        if (diff > max_diff)
+            max_diff = diff;
 
-    std::cerr << mat.data[0] << "\n";
-    std::vector<double> rhs(mat.size, 1.0);
-    std::vector<double> rhs2(mat_cpy.size, 0.0);
+        if (diff < min_diff)
+            min_diff = diff;
+    }
+
+    std::cerr << "Factorization diff: " << factorization_diff << "\n";
+    std::cerr << "Factorization diff / elem: " << factorization_diff / static_cast<double>(mat.data.size()) << "\n";
+    std::cerr << "Min diff: " << min_diff << "\n";
+    std::cerr << "Max diff: " << max_diff << "\n";
+    std::vector<double> rhs(mat.size, 100.0);
+    std::vector<double> rhs2(mat_cpy.size, 100.0);
     status = LAPACKE_dtbtrs(LAPACK_COL_MAJOR, 'L', 'N', 'N', static_cast<int>(mat.size), static_cast<int>(mat.bandwidth), 1,
                             &mat.data[0], static_cast<int>(mat.bandwidth +1), &rhs[0], rhs.size());
     assert(status == 0);
@@ -40,7 +97,7 @@ int main(int argc, char* argv[]) {
     assert(status == 0);
 
     double diff = 0.0;
-    for (int i = 0; i < rhs.size(); ++i)
+    for (size_t i = 0; i < rhs.size(); ++i)
         diff += std::abs(rhs[i] - rhs2[i]);
 
     std::cerr << "Diff: " << diff << "\n";
