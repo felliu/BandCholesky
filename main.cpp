@@ -3,8 +3,7 @@
 
 #include <cassert>
 #include <iostream>
-//#include <mkl.h>
-#include <lapacke.h>
+#include <mkl.h>
 
 namespace {
     /**
@@ -72,7 +71,9 @@ int main(int argc, char* argv[]) {
     double factorization_diff = 0.0;
     double min_diff = 1e10;
     double max_diff = -1e10;
-    for (size_t i = 0; i < mat.data.size(); ++i) {
+
+    constexpr double threshold = 0.02;
+    for (int i = 0; i < mat.data.size(); ++i) {
         double diff = std::abs(mat.data[i] - mat_cpy.data[i]);
         factorization_diff += diff;
         if (diff > max_diff)
@@ -80,6 +81,8 @@ int main(int argc, char* argv[]) {
 
         if (diff < min_diff)
             min_diff = diff;
+        if (diff >= threshold)
+            std::cerr << "Index: " << i << ", diff: " << diff << "\n";
     }
 
     std::cerr << "Factorization diff: " << factorization_diff << "\n";

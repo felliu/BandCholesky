@@ -1,5 +1,5 @@
 CXX = g++
-CXX_FLAGS = -O3 -g -Wall -fopenmp #-m64 -I"${MKLROOT}/include"
+CXX_FLAGS = -O3 -g -Wall -fopenmp -m64 -I"${MKLROOT}/include"
 
 LD_FLAGS = -L${MKLROOT}/lib/intel64 -Wl,--no-as-needed -lmkl_intel_lp64 -lmkl_sequential -lmkl_core -lpthread -lm -ldl
 

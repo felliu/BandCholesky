@@ -16,6 +16,7 @@ namespace {
 
     //Converts from (zero-indexed) 2D index to a 1D index for *COLUMN MAJOR* storage.
     inline int to_flat_index(int nrows, int row, int col) { return nrows * col + row; }
+    inline int to_flat_index2(int nrows, int row, int col) { return nrows * (col - 1) + (row - 1); }
 }
 
 
@@ -65,9 +66,10 @@ int par_dpbtrf(int mat_dim, int bandwidth, double* ab, int ldab) {
                 double* A33_start = ab + to_flat_index(ldab, 0, i + bandwidth);
                 //Copy the upper triangle of the A31 block into the temporary work array
                 for (int j = 0; j < A11_width; ++j) {
-                    for (int k = 0; k < std::min(j, A33_width); ++k) {
+                    const int k_max = std::min(j + 1, A33_width);
+                    for (int k = 0; k < k_max; ++k) {
                         work_arr[to_flat_index(ld_work_arr, k, j)] =
-                            *(ab + to_flat_index(ldab, bandwidth + 1 - j + k, j + i));
+                            *(ab + to_flat_index(ldab, bandwidth - j + k, j + i));
                     }
                 }
 
@@ -78,17 +80,18 @@ int par_dpbtrf(int mat_dim, int bandwidth, double* ab, int ldab) {
                     cblas_dgemm(CblasColMajor, CblasNoTrans, CblasTrans,
                                 A33_width, A22_width, A11_width,
                                 -1.0, &work_arr[0], ld_work_arr,
-                                A21_start, ldab-1, 1.0,
-                                A32_start, ldab-1);
+                                A21_start, ldab - 1, 1.0,
+                                A32_start, ldab - 1);
 
                 cblas_dsyrk(CblasColMajor, CblasLower, CblasNoTrans,
                             A33_width, A11_width, -1.0, &work_arr[0], ld_work_arr,
-                            1.0, A33_start, ldab-1);
+                            1.0, A33_start, ldab - 1);
 
                 //Copy back from work array to A31 upper triangle.
                 for (int j = 0; j < A11_width; ++j) {
-                    for (int k = 0; k < std::min(j, A33_width); ++k) {
-                        *(ab + to_flat_index(ldab, bandwidth + 1 - j + k, j + i)) =
+                    const int k_max = std::min(j + 1, A33_width);
+                    for (int k = 0; k < k_max; ++k) {
+                        *(ab + to_flat_index(ldab, bandwidth - j + k, j + i)) =
                             work_arr[to_flat_index(ld_work_arr, k, j)];
                     }
                 }
