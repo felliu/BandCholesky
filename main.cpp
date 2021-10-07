@@ -55,40 +55,21 @@ int main(int argc, char* argv[]) {
     pad_pb_matrix(mat);
     PB_matrix<double> mat_cpy(mat);
 
-    std::cerr << "Rows: " << mat.bandwidth + 1 << "\n";
-    std::cerr << "Columns: " << mat.size << "\n";
-    std::cerr << "Data size: " << mat.data.size() << "\n";
+    double start = dsecnd();
     int status = par_dpbtrf(static_cast<int>(mat.size),
                             static_cast<int>(mat.bandwidth), &mat.data[0],
                             static_cast<int>(mat.bandwidth + 1));
-    std::cerr << "Status: " << status << "\n";
     assert(status == 0);
 
+    double end_ours = dsecnd();
     status = LAPACKE_dpbtrf(LAPACK_COL_MAJOR, 'L', static_cast<int>(mat_cpy.size),
                             static_cast<int>(mat_cpy.bandwidth), &mat_cpy.data[0],
                             static_cast<int>(mat_cpy.bandwidth + 1));
     assert(status == 0);
-    double factorization_diff = 0.0;
-    double min_diff = 1e10;
-    double max_diff = -1e10;
+    double end = dsecnd();
+    std::cerr << "Factorization time: (ours, serial) " << (end_ours - start) * 1000.0 << " ms\n";
+    std::cerr << "Factorization time: (MKL) " << (end - end_ours) * 1000.0 << " ms\n";
 
-    constexpr double threshold = 0.02;
-    for (int i = 0; i < mat.data.size(); ++i) {
-        double diff = std::abs(mat.data[i] - mat_cpy.data[i]);
-        factorization_diff += diff;
-        if (diff > max_diff)
-            max_diff = diff;
-
-        if (diff < min_diff)
-            min_diff = diff;
-        if (diff >= threshold)
-            std::cerr << "Index: " << i << ", diff: " << diff << "\n";
-    }
-
-    std::cerr << "Factorization diff: " << factorization_diff << "\n";
-    std::cerr << "Factorization diff / elem: " << factorization_diff / static_cast<double>(mat.data.size()) << "\n";
-    std::cerr << "Min diff: " << min_diff << "\n";
-    std::cerr << "Max diff: " << max_diff << "\n";
     std::vector<double> rhs(mat.size, 100.0);
     std::vector<double> rhs2(mat_cpy.size, 100.0);
     status = LAPACKE_dtbtrs(LAPACK_COL_MAJOR, 'L', 'N', 'N', static_cast<int>(mat.size), static_cast<int>(mat.bandwidth), 1,
