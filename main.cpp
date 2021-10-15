@@ -43,6 +43,8 @@ namespace {
         outfile.write(reinterpret_cast<const char*>(&sz), sizeof(sz));
         outfile.write(reinterpret_cast<const char*>(vec.data()), sizeof(T) * sz);
     }
+
+    constexpr int N_TRIES = 1000;
 }
 
 int main(int argc, char* argv[]) {
@@ -51,6 +53,7 @@ int main(int argc, char* argv[]) {
                      "    \t ./band_cholesky_test <size> <bandwidth>\n";
         return -1;
     }
+    mkl_set_num_threads(1);
 
     PB_matrix<double> mat, mat_cpy;
 
@@ -73,28 +76,32 @@ int main(int argc, char* argv[]) {
     mat_cpy = mat;
 
     double start = dsecnd();
-    int status = par_dpbtrf(static_cast<int>(mat.size),
+    int status = 0;
+    double total_time = 0.0;
+    for (int i = 0; i < N_TRIES; ++i) {
+        double start = dsecnd();
+#ifdef RUN_PARALLEL
+        status = par_dpbtrf(static_cast<int>(mat.size),
                             static_cast<int>(mat.bandwidth), &mat.data[0],
                             static_cast<int>(mat.bandwidth + 1));
-    assert(status == 0);
-
-    double end_ours = dsecnd();
-    status = LAPACKE_dpbtrf(LAPACK_COL_MAJOR, 'L', static_cast<int>(mat_cpy.size),
-                            static_cast<int>(mat_cpy.bandwidth), &mat_cpy.data[0],
-                            static_cast<int>(mat_cpy.bandwidth + 1));
-    assert(status == 0);
-    double end = dsecnd();
-    std::cerr << "Factorization time: (ours, serial) " << (end_ours - start) * 1000.0 << " ms\n";
-    std::cerr << "Factorization time: (MKL) " << (end - end_ours) * 1000.0 << " ms\n";
+#else
+        status = LAPACKE_dpbtrf(LAPACK_COL_MAJOR, 'L',
+                                static_cast<int>(mat.size),
+                                static_cast<int>(mat.bandwidth),
+                                &mat.data[0],
+                                static_cast<int>(mat.bandwidth + 1));
+#endif
+        assert(status == 0);
+        double end = dsecnd();
+        total_time += (end - start);
+        mat = mat_cpy;
+    }
+    std::cout << "Elapsed time: " <<  total_time << " s\n";
 
     std::vector<double> rhs(mat.size, 100.0);
     std::vector<double> rhs2(mat_cpy.size, 100.0);
     status = LAPACKE_dtbtrs(LAPACK_COL_MAJOR, 'L', 'N', 'N', static_cast<int>(mat.size), static_cast<int>(mat.bandwidth), 1,
                             &mat.data[0], static_cast<int>(mat.bandwidth +1), &rhs[0], rhs.size());
-    assert(status == 0);
-
-    status = LAPACKE_dtbtrs(LAPACK_COL_MAJOR, 'L', 'N', 'N', static_cast<int>(mat_cpy.size), static_cast<int>(mat_cpy.bandwidth), 1,
-                            &mat_cpy.data[0], static_cast<int>(mat_cpy.bandwidth + 1), &rhs2[0], rhs2.size());
     assert(status == 0);
 
     double diff = 0.0;
