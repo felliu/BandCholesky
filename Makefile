@@ -6,7 +6,7 @@ LD_FLAGS = -L${MKLROOT}/lib/intel64 -Wl,--no-as-needed -lmkl_intel_lp64 -lmkl_se
 band_cholesky_test: main.o par_cholesky.o Makefile
 	${CXX} ${LD_FLAGS} main.o par_cholesky.o -o band_cholesky_test
 
-main.o: main.cpp PB_matrix.h par_cholesky.h Makefile
+main.o: main.cpp PB_matrix.h par_cholesky.h matrix_generator.h Makefile
 	${CXX} ${CXX_FLAGS} main.cpp -c -o main.o
 
 par_cholesky.o: par_cholesky.cpp par_cholesky.h PB_matrix.h Makefile

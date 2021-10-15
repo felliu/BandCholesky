@@ -1,5 +1,6 @@
 #include "PB_matrix.h"
 #include "par_cholesky.h"
+#include "matrix_generator.h"
 
 #include <cassert>
 #include <iostream>
@@ -45,15 +46,31 @@ namespace {
 }
 
 int main(int argc, char* argv[]) {
-    if (argc != 2) {
-        std::cerr << "Usage: ./band_cholesky_test <filename>\n";
+    if (argc > 3 || argc == 1) {
+        std::cerr << "Usage: ./band_cholesky_test <filename>\n"
+                     "    \t ./band_cholesky_test <size> <bandwidth>\n";
         return -1;
     }
 
-    std::string filename(argv[1]);
-    PB_matrix<double> mat = read_pb_matrix<double>(filename);
-    pad_pb_matrix(mat);
-    PB_matrix<double> mat_cpy(mat);
+    PB_matrix<double> mat, mat_cpy;
+
+    if (argc == 2) {
+        std::string filename(argv[1]);
+        mat = read_pb_matrix<double>(filename);
+        pad_pb_matrix(mat);
+    } else if (argc == 3) {
+        auto tmp = std::atoll(argv[1]);
+        int bandwidth = std::atoi(argv[2]);
+        if (tmp < 0 || bandwidth < 0) {
+            std::cerr << "Provide positive values for size and bandwidth\n.";
+            return -1;
+        }
+
+        size_t dimension = static_cast<size_t>(tmp);
+        mat = get_random_pd_bandmat<double>(dimension, bandwidth);
+    }
+
+    mat_cpy = mat;
 
     double start = dsecnd();
     int status = par_dpbtrf(static_cast<int>(mat.size),

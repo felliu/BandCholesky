@@ -1,6 +1,7 @@
 #ifndef PB_MATRIX_H
 #define PB_MATRIX_H
 
+#include <cassert>
 #include <fstream>
 #include <string>
 #include <cstdint>
@@ -16,7 +17,24 @@ struct PB_matrix
     size_t size;
     int32_t bandwidth;
     std::vector<ValueType> data;
+
+    void set_element(int row, int col, ValueType val) {
+        data[get_flat_index(row, col)] = val;
+    }
+
+    int get_flat_index(int row, int col) const;
 };
+
+template <typename ValueType>
+int PB_matrix<ValueType>::get_flat_index(int row, int col) const {
+    assert((row < this->size) && (col < this->size));
+    if (row < col)
+        std::swap(row, col);
+
+    assert(row - col <= this->bandwidth);
+    const int bandoffset = row - col;
+    return col * (this->bandwidth + 1) + bandoffset;
+}
 
 template <typename ValueType>
 PB_matrix<ValueType> read_pb_matrix(const std::string& path)
