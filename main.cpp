@@ -44,7 +44,77 @@ namespace {
         outfile.write(reinterpret_cast<const char*>(vec.data()), sizeof(T) * sz);
     }
 
-    constexpr int N_TRIES = 1000;
+    constexpr int N_TRIES = 10;
+
+    template <typename T>
+    double run_parallel_benchmark(int N_tries, PB_matrix<T>& mat) {
+        double total_time = 0.0;
+        int status = 0;
+        //Keep a copy of the original matrix for re-use, since dpbtrf modifies the matrix in-place.
+        PB_matrix<T> mat_cpy(mat);
+
+        for (int i = 0; i < N_TRIES; ++i) {
+            const double start = dsecnd();
+            status = par_dpbtrf(static_cast<int>(mat.size),
+                                static_cast<int>(mat.bandwidth),
+                                &mat.data[0],
+                                static_cast<int>(mat.bandwidth + 1));
+            const double end = dsecnd();
+            total_time += (end - start);
+            mat = mat_cpy;
+        }
+
+        return total_time;
+    }
+
+    template <typename T>
+    double run_MKL_benchmark(int N_tries, PB_matrix<T>& mat) {
+        double total_time = 0.0;
+        int status = 0;
+        //Keep a copy of the original matrix for re-use, since dpbtrf modifies the matrix in-place.
+        PB_matrix<T> mat_cpy(mat);
+
+        for (int i = 0; i < N_TRIES; ++i) {
+            const double start = dsecnd();
+            status = LAPACKE_dpbtrf(LAPACK_COL_MAJOR, 'L',
+                                    static_cast<int>(mat.size),
+                                    static_cast<int>(mat.bandwidth),
+                                    &mat.data[0],
+                                    static_cast<int>(mat.bandwidth + 1));
+            const double end = dsecnd();
+            total_time += (end - start);
+            mat = mat_cpy;
+        }
+
+        return total_time;
+    }
+
+    template <typename T>
+    void test_factorization(PB_matrix<T>& mat) {
+        std::cout << "Testing factorization correctness...\n";
+        int status = 0;
+        auto mat_cpy = mat;
+        status = par_dpbtrf(static_cast<int>(mat.size),
+                            static_cast<int>(mat.bandwidth),
+                            &mat.data[0],
+                            static_cast<int>(mat.bandwidth + 1));
+        assert(status == 0);
+        status = LAPACKE_dpbtrf(LAPACK_COL_MAJOR, 'L',
+                                static_cast<int>(mat_cpy.size),
+                                static_cast<int>(mat_cpy.bandwidth),
+                                &mat_cpy.data[0],
+                                static_cast<int>(mat_cpy.bandwidth + 1));
+        assert(status == 0);
+
+        double diff = 0.0;
+        for (int i = 0; i < mat.data.size(); ++i)
+            diff += std::abs(mat.data[i] - mat_cpy.data[i]);
+
+        std::cout << "Total diff: " << diff << "\n";
+        std::cout << "Avg diff / elem: " << diff / static_cast<double>(mat.data.size()) << "\n";
+
+        mat = mat_cpy;
+    }
 }
 
 int main(int argc, char* argv[]) {
@@ -53,7 +123,6 @@ int main(int argc, char* argv[]) {
                      "    \t ./band_cholesky_test <size> <bandwidth>\n";
         return -1;
     }
-    mkl_set_num_threads(1);
 
     PB_matrix<double> mat, mat_cpy;
 
@@ -72,43 +141,14 @@ int main(int argc, char* argv[]) {
         size_t dimension = static_cast<size_t>(tmp);
         mat = get_random_pd_bandmat<double>(dimension, bandwidth);
     }
+    //TODO:fix
+    double total_time_ours = run_parallel_benchmark(N_TRIES, mat);
+    double total_time_MKL = run_MKL_benchmark(N_TRIES, mat);
 
-    mat_cpy = mat;
+    std::cout << "Elapsed time (ours): " <<  total_time_ours << " s, Avg / iter: " << 1000.0 * total_time_ours / static_cast<double>(N_TRIES) << " ms\n";
+    std::cout << "Elapsed time (MKL): " <<  total_time_MKL << " s, Avg / iter: " << 1000.0 * total_time_MKL / static_cast<double>(N_TRIES) << " ms\n";
 
-    double start = dsecnd();
-    int status = 0;
-    double total_time = 0.0;
-    for (int i = 0; i < N_TRIES; ++i) {
-        double start = dsecnd();
-#ifdef RUN_PARALLEL
-        status = par_dpbtrf(static_cast<int>(mat.size),
-                            static_cast<int>(mat.bandwidth), &mat.data[0],
-                            static_cast<int>(mat.bandwidth + 1));
-#else
-        status = LAPACKE_dpbtrf(LAPACK_COL_MAJOR, 'L',
-                                static_cast<int>(mat.size),
-                                static_cast<int>(mat.bandwidth),
-                                &mat.data[0],
-                                static_cast<int>(mat.bandwidth + 1));
-#endif
-        assert(status == 0);
-        double end = dsecnd();
-        total_time += (end - start);
-        mat = mat_cpy;
-    }
-    std::cout << "Elapsed time: " <<  total_time << " s\n";
+    test_factorization(mat);
 
-    std::vector<double> rhs(mat.size, 100.0);
-    std::vector<double> rhs2(mat_cpy.size, 100.0);
-    status = LAPACKE_dtbtrs(LAPACK_COL_MAJOR, 'L', 'N', 'N', static_cast<int>(mat.size), static_cast<int>(mat.bandwidth), 1,
-                            &mat.data[0], static_cast<int>(mat.bandwidth +1), &rhs[0], rhs.size());
-    assert(status == 0);
-
-    double diff = 0.0;
-    for (size_t i = 0; i < rhs.size(); ++i)
-        diff += std::abs(rhs[i] - rhs2[i]);
-
-    std::cerr << "Diff: " << diff << "\n";
-    std::cerr << "Avg diff / elem: " << diff / static_cast<double>(rhs.size()) << "\n";
     return 0;
 }
