@@ -124,6 +124,8 @@ int main(int argc, char* argv[]) {
         return -1;
     }
 
+    LAPACKE_set_nancheck(0);
+
     PB_matrix<double> mat, mat_cpy;
 
     if (argc == 2) {
@@ -143,12 +145,12 @@ int main(int argc, char* argv[]) {
     }
     //TODO:fix
     double total_time_ours = run_parallel_benchmark(N_TRIES, mat);
-    double total_time_MKL = run_MKL_benchmark(N_TRIES, mat);
+    //double total_time_MKL = run_MKL_benchmark(N_TRIES, mat);
 
     std::cout << "Elapsed time (ours): " <<  total_time_ours << " s, Avg / iter: " << 1000.0 * total_time_ours / static_cast<double>(N_TRIES) << " ms\n";
-    std::cout << "Elapsed time (MKL): " <<  total_time_MKL << " s, Avg / iter: " << 1000.0 * total_time_MKL / static_cast<double>(N_TRIES) << " ms\n";
+    //std::cout << "Elapsed time (MKL): " <<  total_time_MKL << " s, Avg / iter: " << 1000.0 * total_time_MKL / static_cast<double>(N_TRIES) << " ms\n";
 
-    test_factorization(mat);
+    //test_factorization(mat);
 
     return 0;
 }

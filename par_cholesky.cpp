@@ -37,7 +37,7 @@ int par_dpbtrf(int mat_dim, int bandwidth, double* ab, int ldab) {
     const int ld_work_arr = nb + 1;
     std::vector<double> work_arr(nb * ld_work_arr); //Temporary array used during computations
     std::fill(work_arr.begin(), work_arr.end(), 0.0);
-#pragma omp parallel num_threads(12) shared(nb, work_arr)
+#pragma omp parallel num_threads(6) shared(nb, work_arr)
 {
 #pragma omp single nowait
 {
