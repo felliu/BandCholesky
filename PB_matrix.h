@@ -6,7 +6,9 @@
 #include <string>
 #include <cstdint>
 #include <algorithm>
+#include <iostream>
 #include <vector>
+#include <tuple>
 
 /*  Positive-definite symmetric band matrix.
     Only stores lower triangular elements in column major order.
@@ -23,7 +25,16 @@ struct PB_matrix
     }
 
     int get_flat_index(int row, int col) const;
+    std::tuple<int, int> get_row_col(int index) const;
 };
+
+template <typename ValueType>
+std::tuple<int, int>
+PB_matrix<ValueType>::get_row_col(int index) const {
+    int row = index / (bandwidth + 1);
+    int col = row + (index % (bandwidth + 1));
+    return std::make_tuple(row, col);
+}
 
 template <typename ValueType>
 int PB_matrix<ValueType>::get_flat_index(int row, int col) const {

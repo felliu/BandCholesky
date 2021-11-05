@@ -1,6 +1,7 @@
 #include "PB_matrix.h"
 #include "par_cholesky.h"
 #include "matrix_generator.h"
+#include "pardiso_test.h"
 
 #include <cassert>
 #include <iostream>
@@ -124,6 +125,15 @@ int main(int argc, char* argv[]) {
         return -1;
     }
 
+    PB_matrix<double> mat;
+    if (argc == 2) {
+        std::string filename(argv[1]);
+        mat = read_pb_matrix<double>(filename);
+        pad_pb_matrix(mat);
+    }
+
+    test_pardiso_factorize(mat);
+    /*
     LAPACKE_set_nancheck(0);
 
     PB_matrix<double> mat, mat_cpy;
@@ -151,6 +161,6 @@ int main(int argc, char* argv[]) {
     //std::cout << "Elapsed time (MKL): " <<  total_time_MKL << " s, Avg / iter: " << 1000.0 * total_time_MKL / static_cast<double>(N_TRIES) << " ms\n";
 
     //test_factorization(mat);
-
+    */
     return 0;
 }
