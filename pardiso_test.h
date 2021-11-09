@@ -16,6 +16,7 @@ namespace {
     constexpr int mtype = 2; //Symmetric, pos. def.
     constexpr int msglvl = 1;
     constexpr int solver_phase = 11;
+    constexpr int factor_phase = 22;
     constexpr int nrhs = 1;
 }
 
@@ -34,18 +35,12 @@ void test_pardiso_factorize(const PB_matrix<T>& band_mat) {
 
     std::vector<T> x(csr_mat.cols);
     std::vector<T> rhs(csr_mat.rows);
-    double start = dsecnd();
     pardiso(&pt[0], &maxfct, &mnum, &mtype, &solver_phase, &num_eqs,
             &csr_mat.data[0], &csr_mat.row_ptrs[0], &csr_mat.col_inds[0], &perm[0], &nrhs, &iparm[0], &msglvl, &rhs[0], &x[0], &error);
-    double end = dsecnd();
-
-    std::cerr << "Error code: " << error << "\n";
-    int memory_consumed = std::max(iparm[14], iparm[15] + iparm[16]);
-    int memory_required = iparm[62];
-    std::cerr << "Memory used: " << memory_consumed << " kB\n";
-    std::cerr << "Memory required: " << memory_required << " kB\n";
-
-    std::cerr << "Elapsed time factorization: " << (end - start) * 1000.0 << " ms\n";
+    pardiso(&pt[0], &maxfct, &mnum, &mtype, &factor_phase, &num_eqs,
+            &csr_mat.data[0], &csr_mat.row_ptrs[0], &csr_mat.col_inds[0], &perm[0], &nrhs, &iparm[0], &msglvl, &rhs[0], &x[0], &error);
+    pardiso(&pt[0], &maxfct, &mnum, &mtype, &factor_phase, &num_eqs,
+            &csr_mat.data[0], &csr_mat.row_ptrs[0], &csr_mat.col_inds[0], &perm[0], &nrhs, &iparm[0], &msglvl, &rhs[0], &x[0], &error);
 }
 
 #endif

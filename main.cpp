@@ -133,6 +133,7 @@ int main(int argc, char* argv[]) {
     }
 
     test_pardiso_factorize(mat);
+
     /*
     LAPACKE_set_nancheck(0);
 
@@ -154,11 +155,11 @@ int main(int argc, char* argv[]) {
         mat = get_random_pd_bandmat<double>(dimension, bandwidth);
     }
     //TODO:fix
-    double total_time_ours = run_parallel_benchmark(N_TRIES, mat);
-    //double total_time_MKL = run_MKL_benchmark(N_TRIES, mat);
+    //double total_time_ours = run_parallel_benchmark(N_TRIES, mat);
+    double total_time_MKL = run_MKL_benchmark(N_TRIES, mat);
 
-    std::cout << "Elapsed time (ours): " <<  total_time_ours << " s, Avg / iter: " << 1000.0 * total_time_ours / static_cast<double>(N_TRIES) << " ms\n";
-    //std::cout << "Elapsed time (MKL): " <<  total_time_MKL << " s, Avg / iter: " << 1000.0 * total_time_MKL / static_cast<double>(N_TRIES) << " ms\n";
+    //std::cout << "Elapsed time (ours): " <<  total_time_ours << " s, Avg / iter: " << 1000.0 * total_time_ours / static_cast<double>(N_TRIES) << " ms\n";
+    std::cout << "Elapsed time (MKL): " <<  total_time_MKL << " s, Avg / iter: " << 1000.0 * total_time_MKL / static_cast<double>(N_TRIES) << " ms\n";
 
     //test_factorization(mat);
     */
