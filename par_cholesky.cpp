@@ -37,16 +37,22 @@ int par_dpbtrf(int mat_dim, int bandwidth, double* ab, int ldab) {
     const int ld_work_arr = nb + 1;
     std::vector<double> work_arr(nb * ld_work_arr); //Temporary array used during computations
     std::fill(work_arr.begin(), work_arr.end(), 0.0);
-#pragma omp parallel num_threads(6) shared(nb, work_arr)
+#pragma omp parallel num_threads(3) shared(nb, work_arr)
 {
 #pragma omp single nowait
 {
+    double* A22_start = nullptr;
+    double* A32_start = nullptr;
+    double* A33_start = nullptr;
+    //Start of the chain:
+    #pragma omp task depend(out:A22_start,A32_start,A33_start)
+    {}
     for (int i = 0; i < mat_dim; i += nb) {
         const int A11_width = std::min(nb, mat_dim - i);
         double* A11_start = ab + to_flat_index(ldab, 0, i);
-        double* A22_start = nullptr;
-        double* A32_start = nullptr;
-        double* A33_start = nullptr;
+        A22_start = nullptr;
+        A32_start = nullptr;
+        A33_start = nullptr;
         //Factorize A11 into U11
         #pragma omp task depend(in:A22_start) depend(out:A11_start)
         status = LAPACKE_dpotrf(LAPACK_COL_MAJOR, 'L', A11_width, A11_start, ldab - 1);
@@ -144,8 +150,7 @@ int par_dpbtrf_barrier(int mat_dim, int bandwidth, double* ab, int ldab) {
     const int nb = bandwidth / 2;
     const int ld_work_arr = nb + 1;
     std::vector<double> work_arr(nb * ld_work_arr); //Temporary array used during computations
-    std::fill(work_arr.begin(), work_arr.end(), 0.0);
-#pragma omp parallel num_threads(4) shared(nb, work_arr)
+#pragma omp parallel num_threads(7) shared(nb, work_arr)
 {
 #pragma omp single nowait
 {

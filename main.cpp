@@ -5,6 +5,7 @@
 #include <cassert>
 #include <iostream>
 #include <mkl.h>
+//#include <ittnotify.h>
 
 namespace {
     /**
@@ -44,7 +45,7 @@ namespace {
         outfile.write(reinterpret_cast<const char*>(vec.data()), sizeof(T) * sz);
     }
 
-    constexpr int N_TRIES = 10;
+    constexpr int N_TRIES = 50;
 
     template <typename T>
     double run_parallel_benchmark(int N_tries, PB_matrix<T>& mat) {
@@ -52,6 +53,11 @@ namespace {
         int status = 0;
         //Keep a copy of the original matrix for re-use, since dpbtrf modifies the matrix in-place.
         PB_matrix<T> mat_cpy(mat);
+        //Warm-start
+        status = par_dpbtrf(static_cast<int>(mat.size),
+                            static_cast<int>(mat.bandwidth),
+                            &mat.data[0],
+                            static_cast<int>(mat.bandwidth + 1));
 
         for (int i = 0; i < N_TRIES; ++i) {
             const double start = dsecnd();
@@ -73,6 +79,12 @@ namespace {
         int status = 0;
         //Keep a copy of the original matrix for re-use, since dpbtrf modifies the matrix in-place.
         PB_matrix<T> mat_cpy(mat);
+        //Warm-start
+        status = LAPACKE_dpbtrf(LAPACK_COL_MAJOR, 'L',
+                                static_cast<int>(mat.size),
+                                static_cast<int>(mat.bandwidth),
+                                &mat.data[0],
+                                static_cast<int>(mat.bandwidth + 1));
 
         for (int i = 0; i < N_TRIES; ++i) {
             const double start = dsecnd();
@@ -145,10 +157,10 @@ int main(int argc, char* argv[]) {
     }
     //TODO:fix
     double total_time_ours = run_parallel_benchmark(N_TRIES, mat);
-    //double total_time_MKL = run_MKL_benchmark(N_TRIES, mat);
+    double total_time_MKL = run_MKL_benchmark(N_TRIES, mat);
 
     std::cout << "Elapsed time (ours): " <<  total_time_ours << " s, Avg / iter: " << 1000.0 * total_time_ours / static_cast<double>(N_TRIES) << " ms\n";
-    //std::cout << "Elapsed time (MKL): " <<  total_time_MKL << " s, Avg / iter: " << 1000.0 * total_time_MKL / static_cast<double>(N_TRIES) << " ms\n";
+    std::cout << "Elapsed time (MKL): " <<  total_time_MKL << " s, Avg / iter: " << 1000.0 * total_time_MKL / static_cast<double>(N_TRIES) << " ms\n";
 
     //test_factorization(mat);
 
