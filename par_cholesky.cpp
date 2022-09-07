@@ -85,6 +85,8 @@ int par_dpbtrf(int mat_dim, int bandwidth, double* ab, int ldab) {
                         firstprivate(ab, ld_work_arr, A11_width, A33_width, bandwidth, ldab)
                 {
                 //Copy the upper triangle of the A31 block into the temporary work array
+                    /*mkl_domatcopy('C', 'N', A33_width, A11_width, 1.0,
+                                  ab, A33_width, &work_arr[0], A33_width);*/
                     for (int j = 0; j < A11_width; ++j) {
                         const int k_max = std::min(j + 1, A33_width);
                         for (int k = 0; k < k_max; ++k) {
@@ -117,6 +119,8 @@ int par_dpbtrf(int mat_dim, int bandwidth, double* ab, int ldab) {
                 #pragma omp task depend(inout:work_arr) \
                         firstprivate(ab, ld_work_arr, A11_width, A33_width, bandwidth, ldab)
                 {
+                    /*mkl_domatcopy('C', 'N', A33_width, A11_width, 1.0,
+                                  &work_arr[0], A11_width, ab, A11_width);*/
                     //Copy back from work array to A31 upper triangle.
                     for (int j = 0; j < A11_width; ++j) {
                         const int k_max = std::min(j + 1, A33_width);
@@ -187,13 +191,13 @@ int par_dpbtrf_barrier(int mat_dim, int bandwidth, double* ab, int ldab) {
                 #pragma omp task depend(out:work_arr)
                 {
                 //Copy the upper triangle of the A31 block into the temporary work array
-                    for (int j = 0; j < A11_width; ++j) {
-                        const int k_max = std::min(j + 1, A33_width);
-                        for (int k = 0; k < k_max; ++k) {
-                            work_arr[to_flat_index(ld_work_arr, k, j)] =
-                                *(ab + to_flat_index(ldab, bandwidth - j + k, j + i));
-                        }
+                for (int j = 0; j < A11_width; ++j) {
+                    const int k_max = std::min(j + 1, A33_width);
+                    for (int k = 0; k < k_max; ++k) {
+                        work_arr[to_flat_index(ld_work_arr, k, j)] =
+                            *(ab + to_flat_index(ldab, bandwidth - j + k, j + i));
                     }
+                }
                 }
 
                 #pragma omp task depend(in:A11_start) depend(inout:work_arr)

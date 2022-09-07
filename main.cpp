@@ -137,6 +137,8 @@ int main(int argc, char* argv[]) {
     }
 
     LAPACKE_set_nancheck(0);
+    mkl_domain_set_num_threads(2, MKL_DOMAIN_BLAS);
+    mkl_domain_set_num_threads(2, MKL_DOMAIN_LAPACK);
 
     PB_matrix<double> mat, mat_cpy;
 
