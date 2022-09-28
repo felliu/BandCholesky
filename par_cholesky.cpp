@@ -5,7 +5,12 @@
 #include <iostream>
 #include <vector>
 
+#ifdef USE_MKL_
 #include <mkl.h>
+#else
+#include <cblas.h>
+#include <lapacke.h>
+#endif
 #ifdef USE_BLIS
 #include <blis/blis.h>
 #endif

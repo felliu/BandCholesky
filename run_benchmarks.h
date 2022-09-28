@@ -2,7 +2,12 @@
 #define RUN_BENCHMARKS_H
 
 #include "PB_matrix.h"
+#ifdef USE_MKL_
 #include <mkl.h>
+#else
+#include <cblas.h>
+#include <lapacke.h>
+#endif
 
 template <typename T>
 double run_parallel_benchmark(int N_tries, PB_matrix<T>& mat) {

@@ -8,7 +8,12 @@
 
 #include "PB_matrix.h"
 
+#ifdef USE_MKL_
 #include <mkl.h>
+#else
+#include <cblas.h>
+#include <lapacke.h>
+#endif
 /**
  * Reads an array from a binary file. The file is stored as |sz|data|,
  * where sz is an unsigned 64-bit int.
