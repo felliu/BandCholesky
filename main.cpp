@@ -5,6 +5,10 @@
 #include <cassert>
 #include <iostream>
 #include <mkl.h>
+#define USE_PLASMA
+#ifdef USE_PLASMA
+#include <plasma.h>
+#endif
 //#include <ittnotify.h>
 
 namespace {
@@ -45,7 +49,7 @@ namespace {
         outfile.write(reinterpret_cast<const char*>(vec.data()), sizeof(T) * sz);
     }
 
-    constexpr int N_TRIES = 50;
+    constexpr int N_TRIES = 5;
 
     template <typename T>
     double run_parallel_benchmark(int N_tries, PB_matrix<T>& mat) {
@@ -101,6 +105,37 @@ namespace {
         return total_time;
     }
 
+#ifdef USE_PLASMA
+    template <typename T>
+    double run_plasma_benchmark(int N_tries, PB_matrix<T>& mat) {
+        double total_time = 0.0;
+        int status = 0;
+        const plasma_enum_t uplo_plasma = plasma_uplo_const('L');
+        //Keep a copy of the original matrix for re-use, since dpbtrf modifies the matrix in-place.
+        PB_matrix<T> mat_cpy(mat);
+        //Warm-start
+        status = plasma_dpbtrf(uplo_plasma,
+                               static_cast<int>(mat.size),
+                               static_cast<int>(mat.bandwidth),
+                               &mat.data[0],
+                               static_cast<int>(mat.bandwidth + 1));
+
+        for (int i = 0; i < N_TRIES; ++i) {
+            const double start = dsecnd();
+            status = plasma_dpbtrf(uplo_plasma,
+                                   static_cast<int>(mat.size),
+                                   static_cast<int>(mat.bandwidth),
+                                   &mat.data[0],
+                                   static_cast<int>(mat.bandwidth + 1));
+            const double end = dsecnd();
+            total_time += (end - start);
+            mat = mat_cpy;
+        }
+
+        return total_time;
+    }
+#endif
+
     template <typename T>
     void test_factorization(PB_matrix<T>& mat) {
         std::cout << "Testing factorization correctness...\n";
@@ -135,11 +170,11 @@ int main(int argc, char* argv[]) {
                      "    \t ./band_cholesky_test <size> <bandwidth>\n";
         return -1;
     }
+#ifdef USE_PLASMA
+    plasma_init();
+#endif
 
     LAPACKE_set_nancheck(0);
-    mkl_domain_set_num_threads(2, MKL_DOMAIN_BLAS);
-    mkl_domain_set_num_threads(2, MKL_DOMAIN_LAPACK);
-
     PB_matrix<double> mat, mat_cpy;
 
     if (argc == 2) {
@@ -157,14 +192,18 @@ int main(int argc, char* argv[]) {
         size_t dimension = static_cast<size_t>(tmp);
         mat = get_random_pd_bandmat<double>(dimension, bandwidth);
     }
-    //TODO:fix
-    double total_time_ours = run_parallel_benchmark(N_TRIES, mat);
-    double total_time_MKL = run_MKL_benchmark(N_TRIES, mat);
 
-    std::cout << "Elapsed time (ours): " <<  total_time_ours << " s, Avg / iter: " << 1000.0 * total_time_ours / static_cast<double>(N_TRIES) << " ms\n";
-    std::cout << "Elapsed time (MKL): " <<  total_time_MKL << " s, Avg / iter: " << 1000.0 * total_time_MKL / static_cast<double>(N_TRIES) << " ms\n";
+    //double total_time_ours = run_parallel_benchmark(N_TRIES, mat);
+    //double total_time_MKL = run_MKL_benchmark(N_TRIES, mat);
+    double total_time_plasma = run_plasma_benchmark(N_TRIES, mat);
 
-    //test_factorization(mat);
+    //std::cout << "Elapsed time (ours): " <<  total_time_ours << " s, Avg / iter: " << 1000.0 * total_time_ours / static_cast<double>(N_TRIES) << " ms\n";
+    //std::cout << "Elapsed time (MKL): " <<  total_time_MKL << " s, Avg / iter: " << 1000.0 * total_time_MKL / static_cast<double>(N_TRIES) << " ms\n";
+    std::cout << "Elapsed time (plasma): " <<  total_time_plasma << " s, Avg / iter: " << 1000.0 * total_time_plasma / static_cast<double>(N_TRIES) << " ms\n";
+    test_factorization(mat);
 
+#ifdef USE_PLASMA
+    plasma_finalize();
+#endif
     return 0;
 }

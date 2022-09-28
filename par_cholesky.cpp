@@ -6,11 +6,14 @@
 #include <vector>
 
 #include <mkl.h>
+#include <blis/blis.h>
 
 namespace {
     //lvalue integer constants used for FORTRAN function calling (which needs pointers)
     constexpr int ONE = 1;
     constexpr int MINUS_ONE = -1;
+    double ONE_D = 1.0;
+    double MINUS_ONE_D = -1.0;
 
     constexpr int nb_max = 75; //Value taken from reference-LAPACK, may require tuning.
     //constexpr int ld_work_arr = nb_max + 1;
@@ -68,6 +71,9 @@ int par_dpbtrf(int mat_dim, int bandwidth, double* ab, int ldab) {
             if (A22_width > 0) {
                 #pragma omp task depend(in:A11_start,A32_start) depend(out:A21_start) \
                         firstprivate(A22_width, A11_width, A11_start, ldab, A21_start)
+                //TODO
+                /*bli_dtrsm(BLIS_RIGHT, BLIS_LOWER, BLIS_NO_TRANSPOSE, BLIS_NONUNIT_DIAG,
+                          A22_width, A11_width, &ONE, A11_start, 1, ldab - 1)*/
                 cblas_dtrsm(CblasColMajor, CblasRight, CblasLower, CblasTrans, CblasNonUnit,
                             A22_width, A11_width, 1.0, A11_start, ldab - 1, A21_start, ldab - 1);
 
@@ -104,11 +110,17 @@ int par_dpbtrf(int mat_dim, int bandwidth, double* ab, int ldab) {
                 if (A22_width > 0)
                     #pragma omp task depend(in:A21_start,work_arr) depend(out:A32_start) \
                             firstprivate(A33_width, A22_width, A11_width, ld_work_arr, A21_start, ldab, A32_start)
-                    cblas_dgemm(CblasColMajor, CblasNoTrans, CblasTrans,
+                    bli_dtrmm3(BLIS_LEFT, BLIS_UPPER, BLIS_NO_TRANSPOSE,
+                               BLIS_NONUNIT_DIAG, BLIS_TRANSPOSE,
+                               A33_width, A22_width, &MINUS_ONE_D,
+                               &work_arr[0], 1, ld_work_arr,
+                               A21_start, 1, ldab - 1,
+                               &ONE_D, A32_start, 1, ldab - 1);
+                    /*cblas_dgemm(CblasColMajor, CblasNoTrans, CblasTrans,
                                 A33_width, A22_width, A11_width,
                                 -1.0, &work_arr[0], ld_work_arr,
                                 A21_start, ldab - 1, 1.0,
-                                A32_start, ldab - 1);
+                                A32_start, ldab - 1);*/
 
                 #pragma omp task depend(in:work_arr) depend(out:A33_start) \
                         firstprivate(A33_width, A11_width, A33_start, ldab, ld_work_arr)
