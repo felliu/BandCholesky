@@ -1,0 +1,3 @@
+band_cholesky_test
+*.o
+build/*
