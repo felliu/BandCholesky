@@ -17,6 +17,7 @@ struct PB_matrix
     size_t size;
     int32_t bandwidth;
     std::vector<ValueType> data;
+    bool factorized = false;
 
     void set_element(int row, int col, ValueType val) {
         data[get_flat_index(row, col)] = val;
@@ -27,7 +28,9 @@ struct PB_matrix
 
 template <typename ValueType>
 int PB_matrix<ValueType>::get_flat_index(int row, int col) const {
-    assert((row < this->size) && (col < this->size));
+    assert(row >= 0 && col >= 0);
+    assert((static_cast<size_t>(row) < this->size) &&
+           (static_cast<size_t>(col) < this->size));
     if (row < col)
         std::swap(row, col);
 
@@ -71,7 +74,8 @@ void pad_pb_matrix(PB_matrix<ValueType>& matrix)
     //Keep track of the current index in the original array that we are writing to the padded array.
     int unpadded_idx = n_cpy_elems;
     int num_zeros = 1;
-    for (int row = matrix.size - matrix.bandwidth; row < matrix.size; ++row)
+    for (size_t row = static_cast<size_t>(matrix.size - matrix.bandwidth);
+         row < matrix.size; ++row)
     {
         //Start index in the flat array for each row
         int start_idx = row * (matrix.bandwidth + 1);
