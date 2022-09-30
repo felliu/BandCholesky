@@ -31,6 +31,7 @@ static constexpr size_t default_dim = 100000;
 static void BM_Lapacke(benchmark::State& state) {
     PB_matrix<double> mat = get_random_pd_bandmat<double>(default_dim, state.range(0));
     PB_matrix<double> mat_cpy = mat;
+    mkl_set_num_threads(6);
 #ifdef USE_MKL_
     LAPACKE_set_nancheck(0);
 #endif
@@ -45,12 +46,16 @@ static void BM_Lapacke(benchmark::State& state) {
                        static_cast<int>(mat.bandwidth + 1));
     }
 }
-BENCHMARK(BM_Lapacke)->Iterations(100)->Apply(custom_args);
+//BENCHMARK(BM_Lapacke)->Iterations(10)->Repetitions(10)->Apply(custom_args);
+//BENCHMARK(BM_Lapacke)->Iterations(10)->Repetitions(10)->DenseRange(10, 100, 10);
+//BENCHMARK(BM_Lapacke)->Repetitions(10)->DenseRange(50, 200, 10);
 
-static void PM_par_pbtrf(benchmark::State& state) {
+static void BM_par_pbtrf(benchmark::State& state) {
     PB_matrix<double> mat = get_random_pd_bandmat<double>(default_dim, state.range(0));
     PB_matrix<double> mat_cpy = mat;
-
+#ifdef USE_MKL_
+    LAPACKE_set_nancheck(0);
+#endif
     for (auto _: state) {
         state.PauseTiming();
         mat = mat_cpy;
@@ -61,7 +66,9 @@ static void PM_par_pbtrf(benchmark::State& state) {
                    static_cast<int>(mat.bandwidth + 1));
     }
 }
-BENCHMARK(BM_Lapacke)->Iterations(100)->Apply(custom_args);
+//BENCHMARK(BM_par_pbtrf)->Iterations(10)->Repetitions(10)->Apply(custom_args);
+//BENCHMARK(BM_par_pbtrf)->Iterations(100)->DenseRange(50, 200, 10)->UseRealTime();
+BENCHMARK(BM_par_pbtrf)->Repetitions(10)->Arg(500)->UseRealTime();
 
 BENCHMARK_MAIN();
 

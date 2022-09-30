@@ -11,7 +11,6 @@ PB_matrix<ValueType> get_random_pd_bandmat(size_t dimension, int bandwidth) {
     mat.size = dimension;
     mat.bandwidth = bandwidth;
     mat.data = std::vector<ValueType>(dimension * (bandwidth + 1));
-    std::cerr << "Vector size: " << mat.data.size() << "\n";
 
     //Set up the RNG
     std::random_device rng;

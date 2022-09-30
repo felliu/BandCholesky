@@ -26,6 +26,10 @@ namespace {
     //Converts from (zero-indexed) 2D index to a 1D index for *COLUMN MAJOR* storage.
     inline int to_flat_index(int nrows, int row, int col) { return nrows * col + row; }
     inline int to_flat_index2(int nrows, int row, int col) { return nrows * (col - 1) + (row - 1); }
+#ifdef USE_BLIS
+    double MINUS_ONE_D = -1.0;
+    double ONE_D = 1.0;
+#endif
 }
 
 
