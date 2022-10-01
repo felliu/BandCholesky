@@ -5,7 +5,6 @@
 #include <iostream>
 #include <vector>
 
-#undef USE_MKL_
 #ifdef USE_MKL_
 #include <mkl.h>
 #else
@@ -51,7 +50,7 @@ int par_dpbtrf(int mat_dim, int bandwidth, double* ab, int ldab) {
     const int nb = bandwidth / 2;
     const int ld_work_arr = nb + 1;
     std::vector<double> work_arr(nb * ld_work_arr); //Temporary array used during computations
-#pragma omp parallel num_threads(3) shared(nb, work_arr)
+#pragma omp parallel num_threads(7) shared(nb, work_arr)
 {
 #pragma omp single nowait
 {
