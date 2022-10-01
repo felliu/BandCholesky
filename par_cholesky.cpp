@@ -5,14 +5,17 @@
 #include <iostream>
 #include <vector>
 
+#undef USE_MKL_
 #ifdef USE_MKL_
 #include <mkl.h>
+#else
+#ifdef USE_BLIS
+#include <blis/blis.h>
+#include "dpotrf_wrapper.h"
 #else
 #include <cblas.h>
 #include <lapacke.h>
 #endif
-#ifdef USE_BLIS
-#include <blis/blis.h>
 #endif
 
 namespace {
@@ -48,7 +51,6 @@ int par_dpbtrf(int mat_dim, int bandwidth, double* ab, int ldab) {
     const int nb = bandwidth / 2;
     const int ld_work_arr = nb + 1;
     std::vector<double> work_arr(nb * ld_work_arr); //Temporary array used during computations
-    std::fill(work_arr.begin(), work_arr.end(), 0.0);
 #pragma omp parallel num_threads(3) shared(nb, work_arr)
 {
 #pragma omp single nowait
@@ -67,7 +69,11 @@ int par_dpbtrf(int mat_dim, int bandwidth, double* ab, int ldab) {
         A33_start = nullptr;
         //Factorize A11 into U11
         #pragma omp task depend(in:A22_start) depend(out:A11_start)
+#ifdef USE_BLIS
+        status = dpotrf_wrapper(LAPACK_COL_MAJOR, 'L', A11_width, A11_start, ldab - 1);
+#else
         status = LAPACKE_dpotrf(LAPACK_COL_MAJOR, 'L', A11_width, A11_start, ldab - 1);
+#endif
         /*if (status != 0)
             return status;
         */
@@ -165,7 +171,7 @@ return status;
 
 //Implementation is essentially a direct translation from the FORTRAN dpbtrf from Reference LAPACK on Netlib:
 //https://www.netlib.org/lapack/explore-html/da/dba/group__double_o_t_h_e_rcomputational_gad8b0e25cecc84ea3c5aa894ca1f1b5ca.html
-int par_dpbtrf_barrier(int mat_dim, int bandwidth, double* ab, int ldab) {
+/*int par_dpbtrf_barrier(int mat_dim, int bandwidth, double* ab, int ldab) {
     int status = 0;
     //Check input values
     if (mat_dim <= 0)
@@ -258,4 +264,4 @@ int par_dpbtrf_barrier(int mat_dim, int bandwidth, double* ab, int ldab) {
 } //End OMP single
 } //End OMP parallel
 return status;
-}
+}*/
