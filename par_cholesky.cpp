@@ -108,8 +108,10 @@ int par_dpbtrf(int mat_dim, int bandwidth, double* ab, int ldab) {
                         firstprivate(ab, ld_work_arr, A11_width, A33_width, bandwidth, ldab)
                 {
                 //Copy the upper triangle of the A31 block into the temporary work array
-                    /*mkl_domatcopy('C', 'N', A33_width, A11_width, 1.0,
-                                  ab, A33_width, &work_arr[0], A33_width);*/
+#ifdef USE_MKL_
+                    mkl_domatcopy('C', 'N', A33_width, A11_width, 1.0,
+                                  ab, A33_width, &work_arr[0], A33_width);
+#else
                     for (int j = 0; j < A11_width; ++j) {
                         const int k_max = std::min(j + 1, A33_width);
                         for (int k = 0; k < k_max; ++k) {
@@ -117,6 +119,7 @@ int par_dpbtrf(int mat_dim, int bandwidth, double* ab, int ldab) {
                                 *(ab + to_flat_index(ldab, bandwidth - j + k, j + i));
                         }
                     }
+#endif
                 }
 
                 #pragma omp task depend(in:A11_start) depend(inout:work_arr) \
@@ -151,9 +154,11 @@ int par_dpbtrf(int mat_dim, int bandwidth, double* ab, int ldab) {
                 #pragma omp task depend(inout:work_arr) \
                         firstprivate(ab, ld_work_arr, A11_width, A33_width, bandwidth, ldab)
                 {
-                    /*mkl_domatcopy('C', 'N', A33_width, A11_width, 1.0,
-                                  &work_arr[0], A11_width, ab, A11_width);*/
                     //Copy back from work array to A31 upper triangle.
+#ifdef USE_MKL_
+                    mkl_domatcopy('C', 'N', A33_width, A11_width, 1.0,
+                                  &work_arr[0], A11_width, ab, A11_width);
+#else
                     for (int j = 0; j < A11_width; ++j) {
                         const int k_max = std::min(j + 1, A33_width);
                         for (int k = 0; k < k_max; ++k) {
@@ -161,6 +166,7 @@ int par_dpbtrf(int mat_dim, int bandwidth, double* ab, int ldab) {
                                 work_arr[to_flat_index(ld_work_arr, k, j)];
                         }
                     }
+#endif
                 }
             }
         }

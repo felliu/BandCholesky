@@ -8,15 +8,10 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 OPTION(BC_USE_MKL "Use MKL for BLAS and LAPACK" FALSE)
 OPTION(BC_USE_BLIS "Use specific BLIS kernel internally" FALSE)
-OPTION(BC_USE_PLASMA "Use PLASMA for dpotrf" FALSE)
+OPTION(BC_USE_PLASMA "Link with PLASMA for LAPACK" FALSE)
 
 #For now we only support using PLASMA for LAPACK when BLIS is used for BLAS
 #to avoid a mess with LAPACK symbols from different libraries interfering at runtime.
-if (BC_USE_PLASMA)
-    if (NOT BC_USE_BLIS)
-        message(FATAL_ERROR "BC_USE_PLASMA option only supported with BC_USE_BLIS")
-    endif()
-endif()
 
 if (BC_USE_BLIS)
     set(BLA_STATIC ON)
@@ -65,20 +60,19 @@ if (BC_USE_BLIS)
     #Link in the external LAPACK to the wrapper. Use private to not link the main target to LAPACK too.
     #If we want to use PLASMA for LAPACK, link it in here. For now, only support this with BLIS,
     #since other BLAS:es will often define similar symbols and may be selected when running.
-    if (BC_USE_PLASMA)
-        find_library(PLASMA NAMES plasma
-                     HINTS ENV LIBRARY_PATH)
-        message(STATUS "Plasma: ${PLASMA}")
-        target_compile_definitions(band_cholesky_test PRIVATE USE_PLASMA_)
-        target_compile_definitions(lapack_wrapper PRIVATE USE_PLASMA_)
-        target_link_libraries(lapack_wrapper PRIVATE ${PLASMA})
-    else()
-        target_link_libraries(lapack_wrapper PRIVATE BLAS::BLAS)
-    endif()
+    target_link_libraries(lapack_wrapper PRIVATE BLAS::BLAS)
 
     target_link_libraries(band_cholesky_test PRIVATE lapack_wrapper)
 else()
     target_link_libraries(band_cholesky_test PRIVATE BLAS::BLAS)
+endif()
+
+if (BC_USE_PLASMA)
+    find_library(PLASMA NAMES plasma
+                 HINTS ENV LIBRARY_PATH)
+    message(STATUS "Plasma: ${PLASMA}")
+    target_compile_definitions(band_cholesky_test PRIVATE USE_PLASMA_)
+    target_link_libraries(band_cholesky_test PRIVATE ${PLASMA})
 endif()
 
 target_link_libraries(band_cholesky_test PRIVATE benchmark::benchmark)
