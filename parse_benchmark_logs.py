@@ -74,10 +74,7 @@ def add_labels(ax):
     ax.set_title("Cholesky Performance on Coffee Lake Workstation")
     ax.legend()
 
-
-
-if __name__ == "__main__":
-    plt.style.use("bmh")
+def make_precdog_logs():
     entries_seq_mkl = parse_gbench_console_log("bench_logs/precdog_seq_mkl.log")
     entries_par = parse_gbench_console_log("bench_logs/precdog_par_MKL_seq_3t.log")
     entries_par_mkl = parse_gbench_console_log("bench_logs/precdog_MKL_6t.log")
@@ -90,6 +87,24 @@ if __name__ == "__main__":
     add_labels(ax)
     plt.show()
 
+def make_precdog_hi_logs():
+    entries_par_mkl = parse_gbench_console_log("bench_logs/precdog_MKL_6t_hi.log")
+    entries_par_seq_MKL = parse_gbench_console_log("bench_logs/precdog_par_seq_mkl_3t_hi.log")
+    entries_par_blis = parse_gbench_console_log("bench_logs/precdog_par_blis_3t2t.log")
+    entries_plasma = parse_gbench_console_log("bench_logs/precdog_plasma_mkl_hi_auto_threads.log")
+    fig, ax = plt.subplots()
+    plot_entries(ax, entries_par_mkl, marker="o", lw=0.5, label="MKL (6 threads)")
+    plot_entries(ax, entries_plasma, marker="x", lw=0.5, label="PLASMA (6 threads)")
+    plot_entries(ax, entries_par_seq_MKL, marker="1", lw=0.5, label="Task Parallel + MKL (3 threads)")
+    plot_entries(ax, entries_par_blis, marker="2", lw=0.5, label="Task Parallel + BLIS (6 threads total)")
+    add_labels(ax)
+    plt.show()
+
+if __name__ == "__main__":
+    plt.style.use("bmh")
+    #make_precdog_logs()
+    make_precdog_hi_logs()
+    
 
 
 
