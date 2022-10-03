@@ -10,11 +10,14 @@
 #else
 #ifdef USE_BLIS
 #include <blis/blis.h>
-#include "dpotrf_wrapper.h"
 #else
 #include <cblas.h>
 #include <lapacke.h>
 #endif
+#endif
+
+#if defined USE_PLASMA_ || defined USE_BLIS
+#include "lapack_wrapper.h"
 #endif
 
 namespace {

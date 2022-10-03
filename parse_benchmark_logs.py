@@ -1,6 +1,5 @@
 import json
 import re
-import numpy as np
 
 import matplotlib.pyplot as plt
 
@@ -10,7 +9,6 @@ def parse_gbench_json_log(filename):
 
     with open(filename) as log_file:
         log_obj = json.load(log_file)
-
         bw_regex = r"BM_.*/(\d+)/.*"
 
         for entry in log_obj["benchmarks"]:
@@ -29,29 +27,68 @@ def parse_gbench_json_log(filename):
 
     return (times_mkl, times_par)
 
-def plot_time_comparison(times_mkl, times_par):
-    bandwidths = []
-    times = []
-    mkl_t = []
-    for entry in times_mkl:
-        bandwidths.append(entry["bandwidth"])
-        mkl_t.append(entry["time"])
-    
-    for entry in times_par:
-        times.append(entry["time"])
+mean_regex = r".+/(\d+)/repeats:\d+.*mean.*"
+stddev_regex = r".+/(\d+)/repeats:\d+.*stddev.*"
 
-    fig, ax = plt.subplots()
+def parse_gbench_console_log(filename):
+    #This dictionary when indexed by bandwidth should give a pair of [mean, stddev] times.
+    entries = {}
+    with open(filename, 'r') as log_file:
+        for line in log_file:
+            match_mean = re.match(mean_regex, line)
+            if match_mean:
+                bw = match_mean.group(1)
+                #Each log entry should be formatted as:
+                #<test_name>/<bandwidth>/repeats:<>_mean <time> ms <cpu_time> ms <iters>
+                real_time = line.split()[1]
+                if bw not in entries:
+                    entries[bw] = [0.0, 0.0]
+                
+                entries[bw][0] = real_time
+            match_stddev = re.match(stddev_regex, line)
+            if match_stddev:
+                bw = match_stddev.group(1)
+                stddev = line.split()[1]
+                if bw not in entries:
+                    entries[bw] = [0.0, 0.0]
 
-    ax.semilogy(bandwidths, mkl_t, marker="*")
-    ax.semilogy(bandwidths, times, marker="o")
-    plt.show()
+                entries[bw][1] = stddev
+    return entries
+
+def plot_entries(ax, entries, **plot_kwargs):
+    bandwidths = list(map(int, entries.keys()))
+    bandwidths.sort()
+    real_times = []
+    stddevs = []
+    for bw in bandwidths:
+        real_times.append(entries[str(bw)][0])
+        stddevs.append(entries[str(bw)][1])
+
+    real_times = list(map(float, real_times))
+
+    ax.plot(bandwidths, real_times, **plot_kwargs)
+
+def add_labels(ax):
+    ax.set_xlabel("bandwidth")
+    ax.set_ylabel("Time (ms)")
+    ax.set_title("Cholesky Performance on Coffee Lake Workstation")
+    ax.legend()
 
 
 
 if __name__ == "__main__":
     plt.style.use("bmh")
-    times_mkl, times_par = parse_gbench_json_log("build/precdog_full_space_iomp_mkl.json")
-    plot_time_comparison(times_mkl, times_par)
+    entries_seq_mkl = parse_gbench_console_log("bench_logs/precdog_seq_mkl.log")
+    entries_par = parse_gbench_console_log("bench_logs/precdog_par_MKL_seq_3t.log")
+    entries_par_mkl = parse_gbench_console_log("bench_logs/precdog_MKL_6t.log")
+    entries_par_blis = parse_gbench_console_log("bench_logs/precdog_par_blis_3t.log")
+    fig, ax = plt.subplots()
+    plot_entries(ax, entries_seq_mkl, marker="x", lw=0.5, label="Sequential MKL")
+    plot_entries(ax, entries_par_mkl, marker="o", lw=0.5, label="MKL (6 threads)")
+    plot_entries(ax, entries_par, marker="1", lw=0.5, label="Task Parallel + MKL(3 threads)")
+    plot_entries(ax, entries_par_blis, marker="2", lw=0.5, label="Task Parallel + BLIS (3 threads)")
+    add_labels(ax)
+    plt.show()
 
 
 
