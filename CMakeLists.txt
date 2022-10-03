@@ -76,4 +76,4 @@ if (BC_USE_PLASMA)
 endif()
 
 target_link_libraries(band_cholesky_test PRIVATE benchmark::benchmark)
-target_compile_options(band_cholesky_test PRIVATE -fopenmp)
+target_compile_options(band_cholesky_test PRIVATE -qopenmp)

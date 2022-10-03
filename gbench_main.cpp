@@ -23,6 +23,7 @@
 #endif
 
 #include <benchmark/benchmark.h>
+#include <iostream>
 
 static void custom_args(benchmark::internal::Benchmark* b) {
     constexpr int low_range_min = 10;
@@ -76,7 +77,7 @@ static void BM_Lapacke(benchmark::State& state) {
 }
 //BENCHMARK(BM_Lapacke)->Iterations(10)->Repetitions(10)->Apply(custom_args);
 //BENCHMARK(BM_Lapacke)->Iterations(10)->Repetitions(10)->DenseRange(10, 100, 10);
-BENCHMARK(BM_Lapacke)->Repetitions(10)->DenseRange(50, 200, 10)->UseRealTime();
+//BENCHMARK(BM_Lapacke)->Repetitions(10)->DenseRange(50, 200, 10)->UseRealTime();
 //BENCHMARK(BM_Lapacke)->Repetitions(10)->DenseRange(50, 200, 10)->UseRealTime();
 //BENCHMARK(BM_Lapacke)->Repetitions(10)->Arg(100)->UseRealTime();
 //BENCHMARK(BM_Lapacke)->Repetitions(10)->DenseRange(200, 2000, 100)->UseRealTime();
@@ -103,6 +104,35 @@ static void BM_par_pbtrf(benchmark::State& state) {
 BENCHMARK(BM_par_pbtrf)->Iterations(1)->Arg(1600)->UseRealTime();
 //BENCHMARK(BM_par_pbtrf)->Repetitions(10)->DenseRange(200, 2000, 100)->UseRealTime();
 
+#ifdef USE_MKL_
+void verify_factorization() {
+    PB_matrix<double> mat = get_random_pd_bandmat<double>(default_dim, 100);
+    PB_matrix<double> mat_cpy = mat;
+    
+    LAPACKE_dpbtrf(LAPACK_COL_MAJOR, 'L',
+                   static_cast<int>(mat.size),
+                   static_cast<int>(mat.bandwidth),
+                   &mat_cpy.data[0],
+                   static_cast<int>(mat.bandwidth + 1));
+
+    par_dpbtrf(static_cast<int>(mat.size),
+               static_cast<int>(mat.bandwidth),
+               &mat.data[0],
+               static_cast<int>(mat.bandwidth + 1));
+
+    double total_diff = 0.0;
+    for (size_t i = 0; i < mat.data.size(); ++i) {
+        total_diff += std::fabs(mat.data[i] - mat_cpy.data[i]);
+    }
+    const double avg_diff = total_diff / static_cast<double>(mat.data.size());
+    std::cout << "Diff: " << total_diff << ", avg diff / elem: " << avg_diff << "\n";
+}
+#else
+void verify_factorization() {
+    std::cout << "Skipping verification since no MKL\n";
+}
+#endif
+
 int main(int argc, char** argv) {
 #ifdef USE_BLIS
     bli_init();
@@ -120,6 +150,7 @@ int main(int argc, char** argv) {
 #ifdef USE_BLIS
     bli_finalize();
 #endif
+    verify_factorization();
     return 0;
 }
 

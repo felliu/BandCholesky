@@ -10,6 +10,7 @@
 #else
 #ifdef USE_BLIS
 #include <blis/blis.h>
+#include <blis/cblas.h>
 #else
 #include <cblas.h>
 #include <lapacke.h>
@@ -53,7 +54,7 @@ int par_dpbtrf(int mat_dim, int bandwidth, double* ab, int ldab) {
     const int nb = bandwidth / 2;
     const int ld_work_arr = nb + 1;
     std::vector<double> work_arr(nb * ld_work_arr); //Temporary array used during computations
-#pragma omp parallel num_threads(7) shared(nb, work_arr)
+#pragma omp parallel num_threads(7) shared(work_arr) firstprivate(nb)
 {
 #pragma omp single nowait
 {
@@ -88,9 +89,6 @@ int par_dpbtrf(int mat_dim, int bandwidth, double* ab, int ldab) {
             if (A22_width > 0) {
                 #pragma omp task depend(in:A11_start,A32_start) depend(out:A21_start) \
                         firstprivate(A22_width, A11_width, A11_start, ldab, A21_start)
-                //TODO
-                /*bli_dtrsm(BLIS_RIGHT, BLIS_LOWER, BLIS_NO_TRANSPOSE, BLIS_NONUNIT_DIAG,
-                          A22_width, A11_width, &ONE, A11_start, 1, ldab - 1)*/
                 cblas_dtrsm(CblasColMajor, CblasRight, CblasLower, CblasTrans, CblasNonUnit,
                             A22_width, A11_width, 1.0, A11_start, ldab - 1, A21_start, ldab - 1);
 
@@ -127,9 +125,10 @@ int par_dpbtrf(int mat_dim, int bandwidth, double* ab, int ldab) {
                 cblas_dtrsm(CblasColMajor, CblasRight, CblasLower, CblasTrans, CblasNonUnit,
                             A33_width, A11_width, 1.0, A11_start, ldab - 1, &work_arr[0], ld_work_arr);
 
-                if (A22_width > 0)
+                if (A22_width > 0) {
                     #pragma omp task depend(in:A21_start,work_arr) depend(out:A32_start) \
                             firstprivate(A33_width, A22_width, A11_width, ld_work_arr, A21_start, ldab, A32_start)
+                    {
 #ifdef USE_BLIS
                     bli_dtrmm3(BLIS_LEFT, BLIS_UPPER, BLIS_NO_TRANSPOSE,
                                BLIS_NONUNIT_DIAG, BLIS_TRANSPOSE,
@@ -144,6 +143,8 @@ int par_dpbtrf(int mat_dim, int bandwidth, double* ab, int ldab) {
                                 A21_start, ldab - 1, 1.0,
                                 A32_start, ldab - 1);
 #endif
+                    }
+                }
 
                 #pragma omp task depend(in:work_arr) depend(out:A33_start) \
                         firstprivate(A33_width, A11_width, A33_start, ldab, ld_work_arr)
