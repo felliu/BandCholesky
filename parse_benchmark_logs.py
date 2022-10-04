@@ -88,15 +88,23 @@ def make_precdog_logs():
     plt.show()
 
 def make_precdog_hi_logs():
-    entries_par_mkl = parse_gbench_console_log("bench_logs/precdog_MKL_6t_hi.log")
-    entries_par_seq_MKL = parse_gbench_console_log("bench_logs/precdog_par_seq_mkl_3t_hi.log")
-    entries_par_blis = parse_gbench_console_log("bench_logs/precdog_par_blis_3t2t.log")
-    entries_plasma = parse_gbench_console_log("bench_logs/precdog_plasma_mkl_hi_auto_threads.log")
+    log_names = ["bench_logs/precdog_MKL_6t_hi.log",
+                 "bench_logs/precdog_par_seq_mkl_3t_hi.log",
+                 "bench_logs/precdog_par_blis_3t2t.log",
+                 "bench_logs/precdog_plasma_mkl_hi_auto_threads.log"]
+
+    labels = ["MKL (6 threads)", "PLASMA (6 threads)",
+              "Task Parallel + MKL (3 threads)",
+              "Task Parallel + BLIS (6 threads total)"]
+    plot_log_entries(log_names, labels)
+
+def plot_log_entries(log_names, labels):
+    markers = ["o", "x", "1", "2", "3", "."]
     fig, ax = plt.subplots()
-    plot_entries(ax, entries_par_mkl, marker="o", lw=0.5, label="MKL (6 threads)")
-    plot_entries(ax, entries_plasma, marker="x", lw=0.5, label="PLASMA (6 threads)")
-    plot_entries(ax, entries_par_seq_MKL, marker="1", lw=0.5, label="Task Parallel + MKL (3 threads)")
-    plot_entries(ax, entries_par_blis, marker="2", lw=0.5, label="Task Parallel + BLIS (6 threads total)")
+    for i, (log_name, label) in enumerate(zip(log_names, labels)):
+        entries_log_file = parse_gbench_console_log(log_name)
+        plot_entries(ax, entries_log_file, marker=markers[i], lw=0.5, label=label)
+
     add_labels(ax)
     plt.show()
 
