@@ -99,14 +99,14 @@ static void BM_par_pbtrf(benchmark::State& state) {
     }
 }
 //BENCHMARK(BM_par_pbtrf)->Iterations(10)->Repetitions(10)->Apply(custom_args);
-//BENCHMARK(BM_par_pbtrf)->Repetitions(10)->DenseRange(50, 200, 10)->UseRealTime();
+BENCHMARK(BM_par_pbtrf)->Repetitions(10)->DenseRange(50, 200, 10)->UseRealTime();
 //BENCHMARK(BM_par_pbtrf)->Repetitions(10)->DenseRange(200, 500, 100)->UseRealTime();
 //BENCHMARK(BM_par_pbtrf)->Iterations(1)->Arg(1600)->UseRealTime();
-BENCHMARK(BM_par_pbtrf)->Repetitions(10)->DenseRange(200, 2000, 100)->UseRealTime();
+//BENCHMARK(BM_par_pbtrf)->Repetitions(10)->DenseRange(200, 2000, 100)->UseRealTime();
 
 #ifdef USE_MKL_
 void verify_factorization() {
-    PB_matrix<double> mat = get_random_pd_bandmat<double>(default_dim, 100);
+    PB_matrix<double> mat = get_random_pd_bandmat<double>(default_dim, 150);
     PB_matrix<double> mat_cpy = mat;
     
     LAPACKE_dpbtrf(LAPACK_COL_MAJOR, 'L',

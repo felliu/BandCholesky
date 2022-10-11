@@ -19,6 +19,12 @@ endif()
 find_package(BLAS REQUIRED)
 message(STATUS BLAS lib: ${BLAS_LIBRARIES})
 
+if("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Intel" OR
+   "${CMAKE_CXX_COMPILER_ID}" STREQUAL "IntelLLVM")
+
+   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fp-model=precise")
+endif()
+
 set(BENCHMARK_ENABLE_TESTING OFF)
 add_subdirectory(external/benchmark)
 
@@ -78,6 +84,9 @@ endif()
 target_link_libraries(band_cholesky_test PRIVATE benchmark::benchmark)
 if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
     target_compile_options(band_cholesky_test PRIVATE -fopenmp)
-elseif("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Intel")
+elseif("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Intel" OR
+       "${CMAKE_CXX_COMPILER_ID}" STREQUAL "IntelLLVM")
     target_compile_options(band_cholesky_test PRIVATE -qopenmp)
+elseif("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang")
+    target_compile_options(band_cholesky_test PRIVATE -fopenmp)
 endif()

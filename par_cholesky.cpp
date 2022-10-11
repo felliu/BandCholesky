@@ -59,15 +59,15 @@ int par_dpbtrf(int mat_dim, int bandwidth, double* ab, int ldab) {
 #pragma omp single nowait
 {
     double* A22_start = nullptr;
+    double* A31_start = nullptr;
     double* A32_start = nullptr;
     double* A33_start = nullptr;
     //Start of the chain:
-    #pragma omp task depend(out:A22_start,A32_start,A33_start)
-    {}
     for (int i = 0; i < mat_dim; i += nb) {
         const int A11_width = std::min(nb, mat_dim - i);
         double* A11_start = ab + to_flat_index(ldab, 0, i);
         A22_start = nullptr;
+        A31_start = nullptr;
         A32_start = nullptr;
         A33_start = nullptr;
         //Factorize A11 into U11
@@ -92,7 +92,7 @@ int par_dpbtrf(int mat_dim, int bandwidth, double* ab, int ldab) {
                 cblas_dtrsm(CblasColMajor, CblasRight, CblasLower, CblasTrans, CblasNonUnit,
                             A22_width, A11_width, 1.0, A11_start, ldab - 1, A21_start, ldab - 1);
 
-                #pragma omp task depend(in:A21_start,A33_start) depend(out:A22_start) \
+                #pragma omp task depend(in:A21_start,A33_start) depend(out:A22_start) priority(10)\
                         firstprivate(A22_width, A11_width, A21_start, ldab, A22_start)
                 cblas_dsyrk(CblasColMajor, CblasLower, CblasNoTrans,
                             A22_width, A11_width, -1.0, A21_start,
@@ -100,9 +100,10 @@ int par_dpbtrf(int mat_dim, int bandwidth, double* ab, int ldab) {
             }
 
             if (A33_width > 0) {
+                A31_start = ab + to_flat_index(ldab, bandwidth, i);
                 A32_start = ab + to_flat_index(ldab, bandwidth - A11_width, i + A11_width);
                 A33_start = ab + to_flat_index(ldab, 0, i + bandwidth);
-                #pragma omp task depend(inout:work_arr) \
+                #pragma omp task depend(out:work_arr) depend(in:A31_start)\
                         firstprivate(ab, ld_work_arr, A11_width, A33_width, bandwidth, ldab)
                 {
                 //Copy the upper triangle of the A31 block into the temporary work array
@@ -114,7 +115,7 @@ int par_dpbtrf(int mat_dim, int bandwidth, double* ab, int ldab) {
                         const int k_max = std::min(j + 1, A33_width);
                         for (int k = 0; k < k_max; ++k) {
                             work_arr[to_flat_index(ld_work_arr, k, j)] =
-                                *(ab + to_flat_index(ldab, bandwidth - j + k, j + i));
+                                *(A31_start + to_flat_index(ldab, k - j, j));
                         }
                     }
 //#endif
@@ -126,8 +127,9 @@ int par_dpbtrf(int mat_dim, int bandwidth, double* ab, int ldab) {
                             A33_width, A11_width, 1.0, A11_start, ldab - 1, &work_arr[0], ld_work_arr);
 
                 if (A22_width > 0) {
-                    #pragma omp task depend(in:A21_start,work_arr) depend(out:A32_start) \
-                            firstprivate(A33_width, A22_width, A11_width, ld_work_arr, A21_start, ldab, A32_start)
+                    #pragma omp task depend(in:A21_start,work_arr) depend(out:A32_start)\
+                            firstprivate(A33_width, A22_width, A11_width, \
+                                         ld_work_arr, A21_start, ldab, A32_start)
                     {
 #ifdef USE_BLIS
                     bli_dtrmm3(BLIS_LEFT, BLIS_UPPER, BLIS_NO_TRANSPOSE,
@@ -152,7 +154,7 @@ int par_dpbtrf(int mat_dim, int bandwidth, double* ab, int ldab) {
                             A33_width, A11_width, -1.0, &work_arr[0], ld_work_arr,
                             1.0, A33_start, ldab - 1);
 
-                #pragma omp task depend(inout:work_arr) \
+                #pragma omp task depend(in:work_arr) depend(out:A31_start)\
                         firstprivate(ab, ld_work_arr, A11_width, A33_width, bandwidth, ldab)
                 {
                     //Copy back from work array to A31 upper triangle.
@@ -163,7 +165,7 @@ int par_dpbtrf(int mat_dim, int bandwidth, double* ab, int ldab) {
                     for (int j = 0; j < A11_width; ++j) {
                         const int k_max = std::min(j + 1, A33_width);
                         for (int k = 0; k < k_max; ++k) {
-                            *(ab + to_flat_index(ldab, bandwidth - j + k, j + i)) =
+                            *(A31_start + to_flat_index(ldab, k - j, j)) =
                                 work_arr[to_flat_index(ld_work_arr, k, j)];
                         }
                     }
