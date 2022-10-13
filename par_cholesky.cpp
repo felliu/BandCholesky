@@ -35,6 +35,21 @@ namespace {
     //Converts from (zero-indexed) 2D index to a 1D index for *COLUMN MAJOR* storage.
     inline int to_flat_index(int nrows, int row, int col) { return nrows * col + row; }
     inline int to_flat_index2(int nrows, int row, int col) { return nrows * (col - 1) + (row - 1); }
+    int calc_num_sub_blocks(int bandwidth) {
+        constexpr int target_block_sz = 50;
+        int levels = 0;
+        //We want the block sizes of the sub-blocks to be reasonable
+        //while still keeping that the bandwidth is divisible by the number of levels - 1,
+        //so that the sub-blocks line up properly
+        if (bandwidth <= 2 * target_block_sz) {
+            return 3;
+        }
+
+        levels = (bandwidth + target_block_sz) / target_block_sz;
+        while (bandwidth % (levels - 1) != 0)
+            --levels;
+        return levels;
+    }
 #ifdef USE_BLIS
     double MINUS_ONE_D = -1.0;
     double ONE_D = 1.0;
@@ -184,16 +199,7 @@ return status;
 }
 
 int par_fine_dpbtrf(int mat_dim, int bandwidth, double* ab, int ldab) {
-    //We want the block sizes of the sub-blocks to be reasonable
-    //while still keeping that the bandwidth is divisible by the number of levels - 1,
-    //so that the sub-blocks line up properly
-    constexpr int target_block_sz = 50;
-    int levels = (bandwidth + target_block_sz) / target_block_sz;
-    while (bandwidth % (levels - 1) != 0)
-        --levels;
-
-    levels = 5;
-
+    int levels = calc_num_sub_blocks(bandwidth);
     if (levels > MAX_LEVELS)
         return -1;
     const int nb = bandwidth / (levels - 1);
