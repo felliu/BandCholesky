@@ -183,7 +183,12 @@ int par_dpbtrf(int mat_dim, int bandwidth, double* ab, int ldab) {
 return status;
 }
 
-int par_fine_dpbtrf(int levels, int mat_dim, int bandwidth, double* ab, int ldab) {
+int par_fine_dpbtrf(int mat_dim, int bandwidth, double* ab, int ldab) {
+    constexpr int target_block_sz = 50;
+    int levels = (bandwidth + target_block_sz) / target_block_sz;
+    while (bandwidth % (levels - 1) != 0)
+        --levels;
+
     if (levels > MAX_LEVELS)
         return -1;
     const int nb = bandwidth / (levels - 1);
