@@ -4,6 +4,7 @@
 #include <array>
 #include <iostream>
 #include <vector>
+#include "PB_matrix.h"
 
 #ifdef USE_MKL_
 #include <mkl.h>
@@ -92,7 +93,7 @@ int par_dpbtrf(int mat_dim, int bandwidth, double* ab, int ldab) {
                 cblas_dtrsm(CblasColMajor, CblasRight, CblasLower, CblasTrans, CblasNonUnit,
                             A22_width, A11_width, 1.0, A11_start, ldab - 1, A21_start, ldab - 1);
 
-                #pragma omp task depend(in:A21_start,A33_start) depend(out:A22_start) priority(10)\
+                #pragma omp task depend(in:A21_start,A33_start) depend(out:A22_start) \
                         firstprivate(A22_width, A11_width, A21_start, ldab, A22_start)
                 cblas_dsyrk(CblasColMajor, CblasLower, CblasNoTrans,
                             A22_width, A11_width, -1.0, A21_start,
@@ -180,9 +181,115 @@ int par_dpbtrf(int mat_dim, int bandwidth, double* ab, int ldab) {
 return status;
 }
 
-/*int par_fine_dpbtrf(int levels, int mat_dim, int bandwidth, double* ab, int ldab) {
-    int nb = bandwidth / (levels - 1);
-    for (int i = 0; i < 
-}*/
+int par_fine_dpbtrf(int levels, int mat_dim, int bandwidth, double* ab, int ldab) {
+    const int nb = bandwidth / (levels - 1);
+    const int ld_work_arr = nb + 1;
+    std::vector<double> work_arr(nb * ld_work_arr);
+    //Array of pointers to the start of the sub-blocks in currently active window.
+    //We use this for organisation and to keep track of task dependencies
+    std::vector<std::vector<double*>> block_starts;
+    block_starts.resize(levels);
+    for (int i = 0; i < levels; ++i) {
+        block_starts[i].resize(levels);
+    }
+#pragma omp parallel num_threads(6) firstprivate(nb) shared(ab)
+#pragma omp single
+{
+    for (int i = 0; i < mat_dim; i += nb) {
+        //Fill the array of pointers to the starts of each sub-block
+        for (int block_row = 0; block_row < levels; ++block_row) {
+            for (int block_col = 0; block_col < block_row; ++block_col) {
+                const int row_start = block_row * nb - block_col * nb;
+                const int col_start = i + block_col * nb;
+                block_starts[block_row][block_col] = ab + to_flat_index(ldab, row_start, col_start);
+            }
+        }
+        const int A11_width = std::min(nb, mat_dim - i);
+        double* A11_start = ab + to_flat_index(ldab, 0, i);
+        #pragma omp task depend(out:A11_start)
+        LAPACKE_dpotrf(LAPACK_COL_MAJOR, 'L', A11_width, A11_start, ldab - 1);
+        for (int block_i = 1; block_i < levels - 1; ++block_i) {
+            //Stop processing once we hit the bottom of the matrix
+            double* start = ab + to_flat_index(ldab, block_i * nb, i);
+            const int nrows = std::min(nb, mat_dim - i - block_i * nb);
+            //Check to see if the next sub-block is past the bottom of the matrix
+            if (nrows <= 0)
+                break;
+            cblas_dtrsm(CblasColMajor, CblasRight, CblasLower, CblasTrans,
+                        CblasNonUnit, nrows, A11_width, 1.0, A11_start, ldab - 1,
+                        start, ldab - 1);
+            for (int block_j = 1; block_j <= block_i - 1; ++block_j) {
+                double* A_ij = ab + to_flat_index(ldab, block_i * nb - block_j * nb, i + block_j * nb);
+                double* L_i1 = ab + to_flat_index(ldab, block_i * nb, i);
+                double* L_j1 = ab + to_flat_index(ldab, block_j * nb, i);
+                const int m = nrows;
+                const int n = nb;
+                const int k = nb;
+                cblas_dgemm(CblasColMajor, CblasNoTrans, CblasTrans,
+                            m, n, k, -1.0,
+                            L_i1, ldab - 1,
+                            L_j1, ldab - 1, 1.0,
+                            A_ij, ldab - 1);
+            }
+
+            double* start_diagonal = ab + to_flat_index(ldab, 0, i + block_i * nb);
+            cblas_dsyrk(CblasColMajor, CblasLower, CblasNoTrans,
+                        nrows, A11_width, -1.0, start, ldab - 1,
+                        1.0, start_diagonal, ldab - 1);
+        }
+
+        const int nrows_bottom = std::min(A11_width, mat_dim - i - bandwidth);
+        const int block_i = levels - 1;
+
+        //Check if we have any blocks left, these need special handling since the bottom
+        //left block is upper triangular (its lower left triangle lies outside the band).
+        if (nrows_bottom <= 0)
+            continue;
+
+        double* botleft_start = ab + to_flat_index(ldab, bandwidth, i);
+        //Copy upper triangle of the bottom left block into the work array
+        for (int j = 0; j < nb; ++j) {
+            const int k_max = std::min(j + 1, nrows_bottom);
+            for (int k = 0; k < k_max; ++k) {
+                work_arr[to_flat_index(ld_work_arr, k, j)] =
+                    *(botleft_start + to_flat_index(ldab, k - j, j));
+            }
+        }
+
+        cblas_dtrsm(CblasColMajor, CblasRight, CblasLower, CblasTrans, CblasNonUnit,
+                    nrows_bottom, A11_width, 1.0, A11_start, ldab - 1,
+                    &work_arr[0], ld_work_arr);
+
+        for (int block_j = 1; block_j <= block_i - 1; ++block_j) {
+            double* A_ij = ab + to_flat_index(ldab, block_i * nb - block_j * nb, i + block_j * nb);
+            double* L_j1 = ab + to_flat_index(ldab, block_j * nb, i);
+            const int m = nrows_bottom;
+            const int n = nb;
+            const int k = nb;
+            cblas_dgemm(CblasColMajor, CblasNoTrans, CblasTrans,
+                        m, n, k, -1.0,
+                        &work_arr[0], ld_work_arr,
+                        L_j1, ldab - 1, 1.0,
+                        A_ij, ldab - 1);
+        }
+
+        double* start = ab + to_flat_index(ldab, 0, i + block_i * nb);
+        cblas_dsyrk(CblasColMajor, CblasLower, CblasNoTrans,
+                    nrows_bottom, nb, -1.0, &work_arr[0], ld_work_arr,
+                    1.0, start, ldab - 1);
+
+        //Copy upper triangle of bottom left block back into main matrix
+        for (int j = 0; j < nb; ++j) {
+            const int k_max = std::min(j + 1, nrows_bottom);
+            for (int k = 0; k < k_max; ++k) {
+                *(botleft_start + to_flat_index(ldab, k - j, j)) =
+                    work_arr[to_flat_index(ld_work_arr, k, j)];
+            }
+        }
+    }
+}
+    return 0;
+}
+
 
 
