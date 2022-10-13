@@ -15,10 +15,10 @@ PB_matrix<ValueType> get_random_pd_bandmat(size_t dimension, int bandwidth) {
     //Set up the RNG
     std::random_device rng;
     std::mt19937 generator(rng());
-    std::uniform_real_distribution<ValueType> distr(0.0, 5.0);
+    std::uniform_real_distribution<double> distr(0.0, 5.0);
 
     for (size_t i = 0; i < dimension; ++i) {
-        for (size_t j = i; j < std::min(static_cast<size_t>(i + bandwidth), dimension); ++j) {
+        for (size_t j = i; j < std::min(static_cast<size_t>(i + bandwidth + 1), dimension); ++j) {
             //Set a very large value on the diagonal which is large enough to be larger than the sum
             //of the off-diagonal elements on the same row. This guarantees pos. definiteness.
             if (i == j)
