@@ -27,6 +27,8 @@ namespace {
     constexpr int ONE = 1;
     constexpr int MINUS_ONE = -1;
 
+    constexpr int MAX_LEVELS = 128;
+
     constexpr int nb_max = 75; //Value taken from reference-LAPACK, may require tuning.
     //constexpr int ld_work_arr = nb_max + 1;
 
@@ -182,60 +184,63 @@ return status;
 }
 
 int par_fine_dpbtrf(int levels, int mat_dim, int bandwidth, double* ab, int ldab) {
+    if (levels > MAX_LEVELS)
+        return -1;
     const int nb = bandwidth / (levels - 1);
     const int ld_work_arr = nb + 1;
     std::vector<double> work_arr(nb * ld_work_arr);
     //Array of pointers to the start of the sub-blocks in currently active window.
     //We use this for organisation and to keep track of task dependencies
-    std::vector<std::vector<double*>> block_starts;
-    block_starts.resize(levels);
-    for (int i = 0; i < levels; ++i) {
-        block_starts[i].resize(levels);
-    }
+    //We use a C-style array here, because that is what's compatible with OpenMP task dependencies...
+    double* block_starts[MAX_LEVELS][MAX_LEVELS];
 #pragma omp parallel num_threads(6) firstprivate(nb) shared(ab)
 #pragma omp single
 {
     for (int i = 0; i < mat_dim; i += nb) {
+        #pragma omp taskwait
         //Fill the array of pointers to the starts of each sub-block
         for (int block_row = 0; block_row < levels; ++block_row) {
-            for (int block_col = 0; block_col < block_row; ++block_col) {
+            for (int block_col = 0; block_col <= block_row; ++block_col) {
                 const int row_start = block_row * nb - block_col * nb;
                 const int col_start = i + block_col * nb;
                 block_starts[block_row][block_col] = ab + to_flat_index(ldab, row_start, col_start);
             }
         }
         const int A11_width = std::min(nb, mat_dim - i);
-        double* A11_start = ab + to_flat_index(ldab, 0, i);
-        #pragma omp task depend(out:A11_start)
-        LAPACKE_dpotrf(LAPACK_COL_MAJOR, 'L', A11_width, A11_start, ldab - 1);
+        //double* A11_start = ab + to_flat_index(ldab, 0, i);
+        #pragma omp task depend(out:block_starts[0][0])
+        LAPACKE_dpotrf(LAPACK_COL_MAJOR, 'L', A11_width, block_starts[0][0], ldab - 1);
         for (int block_i = 1; block_i < levels - 1; ++block_i) {
             //Stop processing once we hit the bottom of the matrix
-            double* start = ab + to_flat_index(ldab, block_i * nb, i);
             const int nrows = std::min(nb, mat_dim - i - block_i * nb);
             //Check to see if the next sub-block is past the bottom of the matrix
             if (nrows <= 0)
                 break;
+            
+            #pragma omp task depend(in:block_starts[0][0]) depend(out: block_starts[block_i][0])
             cblas_dtrsm(CblasColMajor, CblasRight, CblasLower, CblasTrans,
-                        CblasNonUnit, nrows, A11_width, 1.0, A11_start, ldab - 1,
-                        start, ldab - 1);
+                        CblasNonUnit, nrows, A11_width, 1.0, block_starts[0][0], ldab - 1,
+                        block_starts[block_i][0], ldab - 1);
             for (int block_j = 1; block_j <= block_i - 1; ++block_j) {
-                double* A_ij = ab + to_flat_index(ldab, block_i * nb - block_j * nb, i + block_j * nb);
+                /*double* A_ij = ab + to_flat_index(ldab, block_i * nb - block_j * nb, i + block_j * nb);
                 double* L_i1 = ab + to_flat_index(ldab, block_i * nb, i);
-                double* L_j1 = ab + to_flat_index(ldab, block_j * nb, i);
+                double* L_j1 = ab + to_flat_index(ldab, block_j * nb, i);*/
                 const int m = nrows;
                 const int n = nb;
                 const int k = nb;
+                #pragma omp task depend(in:block_starts[block_i][0], block_starts[block_j][0]) \
+                                 depend(inout: block_starts[block_i][block_j])
                 cblas_dgemm(CblasColMajor, CblasNoTrans, CblasTrans,
                             m, n, k, -1.0,
-                            L_i1, ldab - 1,
-                            L_j1, ldab - 1, 1.0,
-                            A_ij, ldab - 1);
+                            block_starts[block_i][0], ldab - 1,
+                            block_starts[block_j][0], ldab - 1, 1.0,
+                            block_starts[block_i][block_j], ldab - 1);
             }
 
-            double* start_diagonal = ab + to_flat_index(ldab, 0, i + block_i * nb);
+            #pragma omp task depend(in: block_starts[block_i][0]) depend(inout: block_starts[block_i][block_i])
             cblas_dsyrk(CblasColMajor, CblasLower, CblasNoTrans,
-                        nrows, A11_width, -1.0, start, ldab - 1,
-                        1.0, start_diagonal, ldab - 1);
+                        nrows, A11_width, -1.0, block_starts[block_i][0], ldab - 1,
+                        1.0, block_starts[block_i][block_i], ldab - 1);
         }
 
         const int nrows_bottom = std::min(A11_width, mat_dim - i - bandwidth);
@@ -246,44 +251,52 @@ int par_fine_dpbtrf(int levels, int mat_dim, int bandwidth, double* ab, int ldab
         if (nrows_bottom <= 0)
             continue;
 
-        double* botleft_start = ab + to_flat_index(ldab, bandwidth, i);
         //Copy upper triangle of the bottom left block into the work array
-        for (int j = 0; j < nb; ++j) {
-            const int k_max = std::min(j + 1, nrows_bottom);
-            for (int k = 0; k < k_max; ++k) {
-                work_arr[to_flat_index(ld_work_arr, k, j)] =
-                    *(botleft_start + to_flat_index(ldab, k - j, j));
+        #pragma omp task depend(in: block_starts[block_i][0]) depend(out: work_arr)
+        {
+            for (int j = 0; j < nb; ++j) {
+                const int k_max = std::min(j + 1, nrows_bottom);
+                for (int k = 0; k < k_max; ++k) {
+                    work_arr[to_flat_index(ld_work_arr, k, j)] =
+                        *(block_starts[block_i][0] + to_flat_index(ldab, k - j, j));
+                }
             }
         }
 
+        #pragma omp task depend(in: block_starts[0][0]) depend(inout: work_arr)
         cblas_dtrsm(CblasColMajor, CblasRight, CblasLower, CblasTrans, CblasNonUnit,
-                    nrows_bottom, A11_width, 1.0, A11_start, ldab - 1,
+                    nrows_bottom, A11_width, 1.0, block_starts[0][0], ldab - 1,
                     &work_arr[0], ld_work_arr);
 
         for (int block_j = 1; block_j <= block_i - 1; ++block_j) {
-            double* A_ij = ab + to_flat_index(ldab, block_i * nb - block_j * nb, i + block_j * nb);
-            double* L_j1 = ab + to_flat_index(ldab, block_j * nb, i);
+            /*double* A_ij = ab + to_flat_index(ldab, block_i * nb - block_j * nb, i + block_j * nb);
+            double* L_j1 = ab + to_flat_index(ldab, block_j * nb, i);*/
             const int m = nrows_bottom;
             const int n = nb;
             const int k = nb;
+            #pragma omp task depend(in: block_starts[block_j][0], work_arr) \
+                             depend(out: block_starts[block_i][block_j])
             cblas_dgemm(CblasColMajor, CblasNoTrans, CblasTrans,
                         m, n, k, -1.0,
                         &work_arr[0], ld_work_arr,
-                        L_j1, ldab - 1, 1.0,
-                        A_ij, ldab - 1);
+                        block_starts[block_j][0], ldab - 1, 1.0,
+                        block_starts[block_i][block_j], ldab - 1);
         }
 
-        double* start = ab + to_flat_index(ldab, 0, i + block_i * nb);
+        #pragma omp task depend(in: work_arr) depend(out: block_starts[block_i][block_i])
         cblas_dsyrk(CblasColMajor, CblasLower, CblasNoTrans,
                     nrows_bottom, nb, -1.0, &work_arr[0], ld_work_arr,
-                    1.0, start, ldab - 1);
+                    1.0, block_starts[block_i][block_i], ldab - 1);
 
-        //Copy upper triangle of bottom left block back into main matrix
-        for (int j = 0; j < nb; ++j) {
-            const int k_max = std::min(j + 1, nrows_bottom);
-            for (int k = 0; k < k_max; ++k) {
-                *(botleft_start + to_flat_index(ldab, k - j, j)) =
-                    work_arr[to_flat_index(ld_work_arr, k, j)];
+        #pragma omp task depend(in: work_arr)
+        {
+            //Copy upper triangle of bottom left block back into main matrix
+            for (int j = 0; j < nb; ++j) {
+                const int k_max = std::min(j + 1, nrows_bottom);
+                for (int k = 0; k < k_max; ++k) {
+                    *(block_starts[block_i][0] + to_flat_index(ldab, k - j, j)) =
+                        work_arr[to_flat_index(ld_work_arr, k, j)];
+                }
             }
         }
     }
