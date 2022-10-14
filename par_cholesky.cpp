@@ -18,6 +18,8 @@
 #endif
 #endif
 
+#include <omp.h>
+
 #if defined USE_PLASMA_ || defined USE_BLIS
 #include "lapack_wrapper.h"
 #endif
@@ -42,13 +44,37 @@ namespace {
         //while still keeping that the bandwidth is divisible by the number of levels - 1,
         //so that the sub-blocks line up properly
         if (bandwidth <= 2 * target_block_sz) {
+            //We assume that the bandwidth is, at the very least, even.
+            assert(bandwidth % 2 == 0);
             return 3;
         }
 
-        levels = (bandwidth + target_block_sz) / target_block_sz;
-        while (bandwidth % (levels - 1) != 0)
-            --levels;
-        return levels;
+        int num_threads = omp_get_max_threads();
+
+        levels = std::min((bandwidth + target_block_sz) / target_block_sz, num_threads);
+        //We need to select the number of levels so that (levels - 1) divides the bandwidth.
+        //If we have fewer levels than the number of threads, we scan upwards for an appropriate
+        //number of levels (such that (levels - 1) divides bandwidth).
+        if (levels < num_threads) {
+            while (levels <= num_threads && bandwidth % (levels - 1) != 0)
+                ++levels;
+            //Check if we found an appropriate number of levels
+            if (bandwidth % (levels - 1) == 0)
+                return levels;
+        }
+        //Else, the current value of levels is the number of threads, and we scan downwards for
+        //suitable values
+        else {
+            while (levels >= 3 && bandwidth % (levels - 1) != 0)
+                --levels;
+
+            if (bandwidth % (levels - 1) == 0)
+                return levels;
+        }
+        //In this case, accept the performance loss and just set the number of levels to three,
+        //with the assumption that the bandwidth is even
+        assert(bandwidth % 2 == 0);
+        return 3;
     }
 #ifdef USE_BLIS
     double MINUS_ONE_D = -1.0;
@@ -198,8 +224,14 @@ int par_dpbtrf(int mat_dim, int bandwidth, double* ab, int ldab) {
 return status;
 }
 
+/*int par_fine_dpbtrf(int mat_dim, int bandwidth, double* ab, int ldab) {
+    const int levels = calc_num_sub_blocks(bandwidth);
+    const int status =  par_fine_dpbtrf(3, mat_dim, bandwidth, ab, ldab);
+    return status;
+}*/
+
 int par_fine_dpbtrf(int mat_dim, int bandwidth, double* ab, int ldab) {
-    int levels = calc_num_sub_blocks(bandwidth);
+    const int levels = calc_num_sub_blocks(bandwidth);
     if (levels > MAX_LEVELS)
         return -1;
     const int nb = bandwidth / (levels - 1);
@@ -207,24 +239,25 @@ int par_fine_dpbtrf(int mat_dim, int bandwidth, double* ab, int ldab) {
     std::vector<double> work_arr(nb * ld_work_arr);
     //Array of pointers to the start of the sub-blocks in currently active window.
     //We use this for organisation and to keep track of task dependencies
-    //We use a C-style array here, because that is what's compatible with OpenMP task dependencies...
-#pragma omp parallel num_threads(6)
+    //We use a C-style array here, because that is what's compatible with OpenMP task dependencies.
+#pragma omp parallel
 #pragma omp single
 {
-    double* block_starts[MAX_LEVELS][MAX_LEVELS];
+    char task_dep[MAX_LEVELS][MAX_LEVELS];
+    /*double* block_starts[MAX_LEVELS][MAX_LEVELS];*/
     for (int i = 0; i < mat_dim; i += nb) {
-        //Fill the array of pointers to the starts of each sub-block
+        /*//Fill the array of pointers to the starts of each sub-block
         for (int block_row = 0; block_row < levels; ++block_row) {
             for (int block_col = 0; block_col <= block_row; ++block_col) {
                 const int row_start = block_row * nb - block_col * nb;
                 const int col_start = i + block_col * nb;
                 block_starts[block_row][block_col] = ab + to_flat_index(ldab, row_start, col_start);
             }
-        }
+        }*/
         const int A11_width = std::min(nb, mat_dim - i);
-        //double* A11_start = ab + to_flat_index(ldab, 0, i);
-        #pragma omp task depend(out:block_starts[0][0]) depend(in: block_starts[1][1])
-        LAPACKE_dpotrf(LAPACK_COL_MAJOR, 'L', A11_width, block_starts[0][0], ldab - 1);
+        double* A11_start = ab + to_flat_index(ldab, 0, i);
+        #pragma omp task depend(out:task_dep[0][0]) depend(in: task_dep[1][1])
+        LAPACKE_dpotrf(LAPACK_COL_MAJOR, 'L', A11_width, A11_start, ldab - 1);
         for (int block_i = 1; block_i < levels - 1; ++block_i) {
             //Stop processing once we hit the bottom of the matrix
             const int nrows = std::min(nb, mat_dim - i - block_i * nb);
@@ -232,35 +265,34 @@ int par_fine_dpbtrf(int mat_dim, int bandwidth, double* ab, int ldab) {
             if (nrows <= 0)
                 break;
             
-            #pragma omp task depend(in:block_starts[0][0], block_starts[block_i + 1][1]) \
-                             depend(out: block_starts[block_i][0])
+            double* Ai1_start = ab + to_flat_index(ldab, block_i * nb, i);
+            #pragma omp task depend(in:task_dep[0][0], task_dep[block_i + 1][1]) \
+                             depend(out: task_dep[block_i][0])
             cblas_dtrsm(CblasColMajor, CblasRight, CblasLower, CblasTrans,
-                        CblasNonUnit, nrows, A11_width, 1.0, block_starts[0][0], ldab - 1,
-                        block_starts[block_i][0], ldab - 1);
+                        CblasNonUnit, nrows, A11_width, 1.0, A11_start, ldab - 1,
+                        Ai1_start, ldab - 1);
             for (int block_j = 1; block_j <= block_i - 1; ++block_j) {
-                /*double* A_ij = ab + to_flat_index(ldab, block_i * nb - block_j * nb, i + block_j * nb);
-                double* L_i1 = ab + to_flat_index(ldab, block_i * nb, i);
-                double* L_j1 = ab + to_flat_index(ldab, block_j * nb, i);*/
+                double* A_ij = ab + to_flat_index(ldab, block_i * nb - block_j * nb, i + block_j * nb);
+                double* L_j1 = ab + to_flat_index(ldab, block_j * nb, i);
                 const int m = nrows;
                 const int n = nb;
                 const int k = nb;
-                #pragma omp task depend(in:block_starts[block_i][0], block_starts[block_j][0]) \
-                                 depend(out: block_starts[block_i][block_j])
-                                 /*depend(in:block_starts[block_i + 1][1], block_starts[block_j + 1][1]) \
-                                 depend(in:block_starts[block_i + 1][block_j + 1]) \*/
+                #pragma omp task depend(in:task_dep[block_i][0], task_dep[block_j][0]) \
+                                 depend(out: task_dep[block_i][block_j])
                 cblas_dgemm(CblasColMajor, CblasNoTrans, CblasTrans,
                             m, n, k, -1.0,
-                            block_starts[block_i][0], ldab - 1,
-                            block_starts[block_j][0], ldab - 1, 1.0,
-                            block_starts[block_i][block_j], ldab - 1);
+                            Ai1_start, ldab - 1,
+                            L_j1, ldab - 1, 1.0,
+                            A_ij, ldab - 1);
             }
 
-            #pragma omp task depend(in: block_starts[block_i][0]) \
-                             depend(in: block_starts[block_i + 1][block_i + 1]) \
-                             depend(out: block_starts[block_i][block_i])
+            double* Aii_start = ab + to_flat_index(ldab, 0, i + block_i * nb);
+            #pragma omp task depend(in: task_dep[block_i][0]) \
+                             depend(in: task_dep[block_i + 1][block_i + 1]) \
+                             depend(out: task_dep[block_i][block_i])
             cblas_dsyrk(CblasColMajor, CblasLower, CblasNoTrans,
-                        nrows, A11_width, -1.0, block_starts[block_i][0], ldab - 1,
-                        1.0, block_starts[block_i][block_i], ldab - 1);
+                        nrows, A11_width, -1.0, Ai1_start, ldab - 1,
+                        1.0, Aii_start, ldab - 1);
         }
 
         const int nrows_bottom = std::min(A11_width, mat_dim - i - bandwidth);
@@ -271,50 +303,52 @@ int par_fine_dpbtrf(int mat_dim, int bandwidth, double* ab, int ldab) {
             continue;
 
         const int block_i = levels - 1;
+        double* bottom_left_start = ab + to_flat_index(ldab, block_i * nb, i);
         //Copy upper triangle of the bottom left block into the work array
-        #pragma omp task depend(in: block_starts[block_i][0]) depend(out: work_arr)
+        #pragma omp task depend(in: task_dep[block_i][0]) depend(out: work_arr)
         {
             for (int j = 0; j < nb; ++j) {
                 const int k_max = std::min(j + 1, nrows_bottom);
                 for (int k = 0; k < k_max; ++k) {
                     work_arr[to_flat_index(ld_work_arr, k, j)] =
-                        *(block_starts[block_i][0] + to_flat_index(ldab, k - j, j));
+                        *(bottom_left_start + to_flat_index(ldab, k - j, j));
                 }
             }
         }
 
-        #pragma omp task depend(in: block_starts[0][0]) depend(inout: work_arr)
+        #pragma omp task depend(in: task_dep[0][0]) depend(inout: work_arr)
         cblas_dtrsm(CblasColMajor, CblasRight, CblasLower, CblasTrans, CblasNonUnit,
-                    nrows_bottom, A11_width, 1.0, block_starts[0][0], ldab - 1,
+                    nrows_bottom, A11_width, 1.0, A11_start, ldab - 1,
                     &work_arr[0], ld_work_arr);
 
         for (int block_j = 1; block_j <= block_i - 1; ++block_j) {
-            /*double* A_ij = ab + to_flat_index(ldab, block_i * nb - block_j * nb, i + block_j * nb);
-            double* L_j1 = ab + to_flat_index(ldab, block_j * nb, i);*/
+            double* A_ij = ab + to_flat_index(ldab, block_i * nb - block_j * nb, i + block_j * nb);
+            double* L_j1 = ab + to_flat_index(ldab, block_j * nb, i);
             const int m = nrows_bottom;
             const int n = nb;
             const int k = nb;
-            #pragma omp task depend(in: block_starts[block_j][0], work_arr) \
-                             depend(out: block_starts[block_i][block_j])
+            #pragma omp task depend(in: task_dep[block_j][0], work_arr) \
+                             depend(out: task_dep[block_i][block_j])
             cblas_dgemm(CblasColMajor, CblasNoTrans, CblasTrans,
                         m, n, k, -1.0,
                         &work_arr[0], ld_work_arr,
-                        block_starts[block_j][0], ldab - 1, 1.0,
-                        block_starts[block_i][block_j], ldab - 1);
+                        L_j1, ldab - 1, 1.0,
+                        A_ij, ldab - 1);
         }
 
-        #pragma omp task depend(in: work_arr) depend(out: block_starts[block_i][block_i])
+        double* diag_start = ab + to_flat_index(ldab, 0, i + block_i * nb);
+        #pragma omp task depend(in: work_arr) depend(out: task_dep[block_i][block_i])
         cblas_dsyrk(CblasColMajor, CblasLower, CblasNoTrans,
                     nrows_bottom, nb, -1.0, &work_arr[0], ld_work_arr,
-                    1.0, block_starts[block_i][block_i], ldab - 1);
+                    1.0, diag_start, ldab - 1);
 
-        #pragma omp task depend(in: work_arr) depend(out: block_starts[block_i][0])
+        #pragma omp task depend(in: work_arr) depend(out: task_dep[block_i][0])
         {
             //Copy upper triangle of bottom left block back into main matrix
             for (int j = 0; j < nb; ++j) {
                 const int k_max = std::min(j + 1, nrows_bottom);
                 for (int k = 0; k < k_max; ++k) {
-                    *(block_starts[block_i][0] + to_flat_index(ldab, k - j, j)) =
+                    *(bottom_left_start + to_flat_index(ldab, k - j, j)) =
                         work_arr[to_flat_index(ld_work_arr, k, j)];
                 }
             }
@@ -323,6 +357,5 @@ int par_fine_dpbtrf(int mat_dim, int bandwidth, double* ab, int ldab) {
 }
     return 0;
 }
-
 
 
