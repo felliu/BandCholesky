@@ -200,6 +200,7 @@ return status;
 
 int par_fine_dpbtrf(int mat_dim, int bandwidth, double* ab, int ldab) {
     int levels = calc_num_sub_blocks(bandwidth);
+    levels = 3;
     if (levels > MAX_LEVELS)
         return -1;
     const int nb = bandwidth / (levels - 1);
@@ -209,7 +210,7 @@ int par_fine_dpbtrf(int mat_dim, int bandwidth, double* ab, int ldab) {
     //We use this for organisation and to keep track of task dependencies
     //We use a C-style array here, because that is what's compatible with OpenMP task dependencies...
     double* block_starts[MAX_LEVELS][MAX_LEVELS];
-#pragma omp parallel num_threads(6) firstprivate(nb) shared(ab)
+#pragma omp parallel num_threads(6)
 #pragma omp single
 {
     for (int i = 0; i < mat_dim; i += nb) {
@@ -245,7 +246,7 @@ int par_fine_dpbtrf(int mat_dim, int bandwidth, double* ab, int ldab) {
                 const int n = nb;
                 const int k = nb;
                 #pragma omp task depend(in:block_starts[block_i][0], block_starts[block_j][0]) \
-                                 depend(inout: block_starts[block_i][block_j])
+                                 depend(out: block_starts[block_i][block_j])
                 cblas_dgemm(CblasColMajor, CblasNoTrans, CblasTrans,
                             m, n, k, -1.0,
                             block_starts[block_i][0], ldab - 1,
@@ -253,7 +254,7 @@ int par_fine_dpbtrf(int mat_dim, int bandwidth, double* ab, int ldab) {
                             block_starts[block_i][block_j], ldab - 1);
             }
 
-            #pragma omp task depend(in: block_starts[block_i][0]) depend(inout: block_starts[block_i][block_i])
+            #pragma omp task depend(in: block_starts[block_i][0]) depend(out: block_starts[block_i][block_i])
             cblas_dsyrk(CblasColMajor, CblasLower, CblasNoTrans,
                         nrows, A11_width, -1.0, block_starts[block_i][0], ldab - 1,
                         1.0, block_starts[block_i][block_i], ldab - 1);

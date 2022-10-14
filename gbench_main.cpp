@@ -99,10 +99,10 @@ static void BM_par_pbtrf(benchmark::State& state) {
     }
 }
 //BENCHMARK(BM_par_pbtrf)->Iterations(10)->Repetitions(10)->Apply(custom_args);
-//BENCHMARK(BM_par_pbtrf)->Repetitions(10)->DenseRange(50, 200, 10)->UseRealTime();
+BENCHMARK(BM_par_pbtrf)->Repetitions(10)->DenseRange(50, 200, 10)->UseRealTime();
 //BENCHMARK(BM_par_pbtrf)->Repetitions(10)->DenseRange(60, 200, 20)->UseRealTime();
 //BENCHMARK(BM_par_pbtrf)->Repetitions(10)->DenseRange(200, 500, 100)->UseRealTime();
-BENCHMARK(BM_par_pbtrf)->Iterations(1)->Arg(1600)->UseRealTime();
+//BENCHMARK(BM_par_pbtrf)->Iterations(1)->Arg(1600)->UseRealTime();
 //BENCHMARK(BM_par_pbtrf)->Repetitions(10)->DenseRange(200, 2000, 100)->UseRealTime();
 
 #ifdef USE_MKL_
