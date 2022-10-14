@@ -72,7 +72,7 @@ int par_dpbtrf(int mat_dim, int bandwidth, double* ab, int ldab) {
     const int nb = bandwidth / 2;
     const int ld_work_arr = nb + 1;
     std::vector<double> work_arr(nb * ld_work_arr); //Temporary array used during computations
-#pragma omp parallel num_threads(6) shared(work_arr, nb)
+#pragma omp parallel num_threads(3) shared(work_arr, nb)
 {
 #pragma omp single nowait
 {
@@ -208,7 +208,7 @@ int par_fine_dpbtrf(int mat_dim, int bandwidth, double* ab, int ldab) {
     //Array of pointers to the start of the sub-blocks in currently active window.
     //We use this for organisation and to keep track of task dependencies
     //We use a C-style array here, because that is what's compatible with OpenMP task dependencies...
-#pragma omp parallel num_threads(6) firstprivate(nb) shared(ab)
+#pragma omp parallel num_threads(6)
 #pragma omp single
 {
     double* block_starts[MAX_LEVELS][MAX_LEVELS];
@@ -245,9 +245,9 @@ int par_fine_dpbtrf(int mat_dim, int bandwidth, double* ab, int ldab) {
                 const int n = nb;
                 const int k = nb;
                 #pragma omp task depend(in:block_starts[block_i][0], block_starts[block_j][0]) \
-                                 depend(in:block_starts[block_i + 1][1], block_starts[block_j + 1][1]) \
-                                 depend(in:block_starts[block_i + 1][block_j + 1]) \
-                                 depend(inout: block_starts[block_i][block_j])
+                                 depend(out: block_starts[block_i][block_j])
+                                 /*depend(in:block_starts[block_i + 1][1], block_starts[block_j + 1][1]) \
+                                 depend(in:block_starts[block_i + 1][block_j + 1]) \*/
                 cblas_dgemm(CblasColMajor, CblasNoTrans, CblasTrans,
                             m, n, k, -1.0,
                             block_starts[block_i][0], ldab - 1,
@@ -255,9 +255,9 @@ int par_fine_dpbtrf(int mat_dim, int bandwidth, double* ab, int ldab) {
                             block_starts[block_i][block_j], ldab - 1);
             }
 
-            #pragma omp task depend(in: block_starts[block_i][0], block_starts[block_i + 1][1]) \
+            #pragma omp task depend(in: block_starts[block_i][0]) \
                              depend(in: block_starts[block_i + 1][block_i + 1]) \
-                             depend(inout: block_starts[block_i][block_i])
+                             depend(out: block_starts[block_i][block_i])
             cblas_dsyrk(CblasColMajor, CblasLower, CblasNoTrans,
                         nrows, A11_width, -1.0, block_starts[block_i][0], ldab - 1,
                         1.0, block_starts[block_i][block_i], ldab - 1);

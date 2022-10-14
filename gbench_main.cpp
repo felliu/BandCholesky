@@ -92,21 +92,22 @@ static void BM_par_pbtrf(benchmark::State& state) {
         state.PauseTiming();
         mat = mat_cpy;
         state.ResumeTiming();
-        par_dpbtrf(static_cast<int>(mat.size),
-                   static_cast<int>(mat.bandwidth),
-                   &mat.data[0],
-                   static_cast<int>(mat.bandwidth + 1));
+        par_fine_dpbtrf(static_cast<int>(mat.size),
+                        static_cast<int>(mat.bandwidth),
+                        &mat.data[0],
+                        static_cast<int>(mat.bandwidth + 1));
     }
 }
 //BENCHMARK(BM_par_pbtrf)->Iterations(10)->Repetitions(10)->Apply(custom_args);
 BENCHMARK(BM_par_pbtrf)->Repetitions(10)->DenseRange(50, 200, 10)->UseRealTime();
 //BENCHMARK(BM_par_pbtrf)->Repetitions(10)->DenseRange(200, 500, 100)->UseRealTime();
 //BENCHMARK(BM_par_pbtrf)->Iterations(1)->Arg(1600)->UseRealTime();
+//BENCHMARK(BM_par_pbtrf)->Iterations(1)->Arg(500)->UseRealTime();
 //BENCHMARK(BM_par_pbtrf)->Repetitions(10)->DenseRange(200, 2000, 100)->UseRealTime();
 
 #ifdef USE_MKL_
 void verify_factorization() {
-    PB_matrix<double> mat = get_random_pd_bandmat<double>(default_dim, 150);
+    PB_matrix<double> mat = get_random_pd_bandmat<double>(default_dim, 76);
     PB_matrix<double> mat_cpy = mat;
     
     LAPACKE_dpbtrf(LAPACK_COL_MAJOR, 'L',
@@ -115,7 +116,7 @@ void verify_factorization() {
                    &mat_cpy.data[0],
                    static_cast<int>(mat.bandwidth + 1));
 
-    par_dpbtrf(static_cast<int>(mat.size),
+    par_fine_dpbtrf(static_cast<int>(mat.size),
                static_cast<int>(mat.bandwidth),
                &mat.data[0],
                static_cast<int>(mat.bandwidth + 1));
