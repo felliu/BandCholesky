@@ -75,17 +75,13 @@ def add_labels(ax):
     ax.legend()
 
 def make_precdog_logs():
-    entries_seq_mkl = parse_gbench_console_log("bench_logs/precdog_seq_mkl.log")
-    entries_par = parse_gbench_console_log("bench_logs/precdog_par_MKL_seq_3t.log")
-    entries_par_mkl = parse_gbench_console_log("bench_logs/precdog_MKL_6t.log")
-    entries_par_blis = parse_gbench_console_log("bench_logs/precdog_par_blis_3t.log")
-    fig, ax = plt.subplots()
-    plot_entries(ax, entries_seq_mkl, marker="x", lw=0.5, label="Sequential MKL")
-    plot_entries(ax, entries_par_mkl, marker="o", lw=0.5, label="MKL (6 threads)")
-    plot_entries(ax, entries_par, marker="1", lw=0.5, label="Task Parallel + MKL(3 threads)")
-    plot_entries(ax, entries_par_blis, marker="2", lw=0.5, label="Task Parallel + BLIS (3 threads)")
-    add_labels(ax)
-    plt.show()
+    log_names = ["bench_logs/precdog_seq_mkl.log",
+                "bench_logs/precdog_MKL_6t.log",
+                 "bench_logs/precdog_par_fine_mkl_seq.log"]
+    labels = ["Sequential MKL",
+              "MKL (6 threads)",
+              "Task Parallel + MKL"]
+    plot_log_entries(log_names, labels)
 
 def make_precdog_hi_logs():
     log_names = ["bench_logs/precdog_MKL_6t_hi.log",
@@ -106,12 +102,12 @@ def plot_log_entries(log_names, labels):
         plot_entries(ax, entries_log_file, marker=markers[i], lw=0.5, label=label)
 
     add_labels(ax)
-    plt.show()
+    plt.savefig("precdog_lo.pdf")
 
 if __name__ == "__main__":
     plt.style.use("bmh")
-    #make_precdog_logs()
-    make_precdog_hi_logs()
+    make_precdog_logs()
+    #make_precdog_hi_logs()
     
 
 
