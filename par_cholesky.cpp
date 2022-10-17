@@ -240,10 +240,10 @@ int par_fine_dpbtrf(int mat_dim, int bandwidth, double* ab, int ldab) {
     //Array of pointers to the start of the sub-blocks in currently active window.
     //We use this for organisation and to keep track of task dependencies
     //We use a C-style array here, because that is what's compatible with OpenMP task dependencies.
+    char task_dep[MAX_LEVELS][MAX_LEVELS];
 #pragma omp parallel
 #pragma omp single
 {
-    char task_dep[MAX_LEVELS][MAX_LEVELS];
     /*double* block_starts[MAX_LEVELS][MAX_LEVELS];*/
     for (int i = 0; i < mat_dim; i += nb) {
         /*//Fill the array of pointers to the starts of each sub-block
@@ -257,7 +257,11 @@ int par_fine_dpbtrf(int mat_dim, int bandwidth, double* ab, int ldab) {
         const int A11_width = std::min(nb, mat_dim - i);
         double* A11_start = ab + to_flat_index(ldab, 0, i);
         #pragma omp task depend(out:task_dep[0][0]) depend(in: task_dep[1][1])
+#ifdef USE_BLIS
+        dpotrf_wrapper(LAPACK_COL_MAJOR, 'L', A11_width, A11_start, ldab - 1);
+#else
         LAPACKE_dpotrf(LAPACK_COL_MAJOR, 'L', A11_width, A11_start, ldab - 1);
+#endif
         for (int block_i = 1; block_i < levels - 1; ++block_i) {
             //Stop processing once we hit the bottom of the matrix
             const int nrows = std::min(nb, mat_dim - i - block_i * nb);

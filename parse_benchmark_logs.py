@@ -66,7 +66,7 @@ def plot_entries(ax, entries, **plot_kwargs):
 
     real_times = list(map(float, real_times))
 
-    ax.plot(bandwidths, real_times, **plot_kwargs)
+    ax.semilogy(bandwidths, real_times, **plot_kwargs)
 
 def add_labels(ax):
     ax.set_xlabel("bandwidth")
@@ -77,21 +77,23 @@ def add_labels(ax):
 def make_precdog_logs():
     log_names = ["bench_logs/precdog_seq_mkl.log",
                 "bench_logs/precdog_MKL_6t.log",
-                 "bench_logs/precdog_par_fine_mkl_seq.log"]
+                "bench_logs/precdog_par_fine_mkl_seq.log",
+                "bench_logs/precdog_par_fine_blis_seq.log"]
     labels = ["Sequential MKL",
               "MKL (6 threads)",
-              "Task Parallel + MKL"]
+              "Task Parallel + MKL",
+              "Task Parallel + BLIS"]
     plot_log_entries(log_names, labels)
 
 def make_precdog_hi_logs():
     log_names = ["bench_logs/precdog_MKL_6t_hi.log",
-                 "bench_logs/precdog_par_seq_mkl_3t_hi.log",
-                 "bench_logs/precdog_par_blis_3t2t.log",
-                 "bench_logs/precdog_plasma_mkl_hi_auto_threads.log"]
+                 "bench_logs/precdog_plasma_mkl_hi_auto_threads.log",
+                 "bench_logs/precdog_par_fine_mkl_seq_hi.log",
+                 "bench_logs/precdog_par_fine_blis_seq_hi.log"]
 
     labels = ["MKL (6 threads)", "PLASMA (6 threads)",
-              "Task Parallel + MKL (3 threads)",
-              "Task Parallel + BLIS (6 threads total)"]
+              "Task Parallel + MKL (6 threads)",
+              "Task Parallel + BLIS (6 threads)"]
     plot_log_entries(log_names, labels)
 
 def plot_log_entries(log_names, labels):
@@ -102,12 +104,12 @@ def plot_log_entries(log_names, labels):
         plot_entries(ax, entries_log_file, marker=markers[i], lw=0.5, label=label)
 
     add_labels(ax)
-    plt.savefig("precdog_lo.pdf")
+    plt.savefig("precdog_hi_fine_log.pdf")
 
 if __name__ == "__main__":
     plt.style.use("bmh")
-    make_precdog_logs()
-    #make_precdog_hi_logs()
+    #make_precdog_logs()
+    make_precdog_hi_logs()
     
 
 
