@@ -27,7 +27,7 @@ def parse_gbench_json_log(filename):
 
     return (times_mkl, times_par)
 
-mean_regex = r".+/(\d+)/repeats:\d+.*mean.*"
+median_regex = r".+/(\d+)/repeats:\d+.*median.*"
 stddev_regex = r".+/(\d+)/repeats:\d+.*stddev.*"
 
 def parse_gbench_console_log(filename):
@@ -35,9 +35,9 @@ def parse_gbench_console_log(filename):
     entries = {}
     with open(filename, 'r') as log_file:
         for line in log_file:
-            match_mean = re.match(mean_regex, line)
-            if match_mean:
-                bw = match_mean.group(1)
+            match_median = re.match(median_regex, line)
+            if match_median:
+                bw = match_median.group(1)
                 #Each log entry should be formatted as:
                 #<test_name>/<bandwidth>/repeats:<>_mean <time> ms <cpu_time> ms <iters>
                 real_time = line.split()[1]
@@ -66,12 +66,12 @@ def plot_entries(ax, entries, **plot_kwargs):
 
     real_times = list(map(float, real_times))
 
-    ax.semilogy(bandwidths, real_times, **plot_kwargs)
+    ax.plot(bandwidths, real_times, **plot_kwargs)
 
 def add_labels(ax):
     ax.set_xlabel("bandwidth")
     ax.set_ylabel("Time (ms)")
-    ax.set_title("Cholesky Performance on Coffee Lake Workstation")
+    ax.set_title("Cholesky Performance on Kebnekaise")
     ax.legend()
 
 def make_precdog_logs():
@@ -85,6 +85,21 @@ def make_precdog_logs():
               "Task Parallel + BLIS"]
     plot_log_entries(log_names, labels)
 
+def make_keb_logs():
+    log_names = ["bench_logs_keb/keb_seq_mkl.log",
+                "bench_logs_keb/keb_mkl_14t.log",
+                "bench_logs_keb/keb_mkl_7t_numactl.log",
+                "bench_logs_keb/keb_par_fine_mkl_seq.log",
+                "bench_logs_keb/keb_par_blis_fine.log",
+                "bench_logs_keb/keb_par_mkl_7t_numactl.log"]
+    labels = ["Sequential MKL",
+              "MKL (14 threads)",
+              "MKL (7 threads) NUMA",
+              "Task Parallel + MKL (14 threads)",
+              "Task Parallel + BLIS (14 threads)",
+              "Task Parallel + MKL (7 threads) NUMA"]
+    plot_log_entries(log_names, labels)
+
 def make_precdog_hi_logs():
     log_names = ["bench_logs/precdog_MKL_6t_hi.log",
                  "bench_logs/precdog_plasma_mkl_hi_auto_threads.log",
@@ -96,6 +111,17 @@ def make_precdog_hi_logs():
               "Task Parallel + BLIS (6 threads)"]
     plot_log_entries(log_names, labels)
 
+def make_keb_hi_logs():
+    log_names = ["bench_logs_keb/keb_mkl_14t_hi.log",
+                 "bench_logs_keb/keb_plasma_hi.log",
+                 "bench_logs_keb/keb_par_fine_mkl_seq_hi.log",
+                 "bench_logs_keb/keb_par_blis_fine_hi.log"]
+
+    labels = ["MKL (14 threads)", "PLASMA (14 threads)",
+              "Task Parallel + MKL (14 threads)",
+              "Task Parallel + BLIS (14 threads)"]
+    plot_log_entries(log_names, labels)
+
 def plot_log_entries(log_names, labels):
     markers = ["o", "x", "1", "2", "3", "."]
     fig, ax = plt.subplots()
@@ -104,12 +130,15 @@ def plot_log_entries(log_names, labels):
         plot_entries(ax, entries_log_file, marker=markers[i], lw=0.5, label=label)
 
     add_labels(ax)
-    plt.savefig("precdog_hi_fine_log.pdf")
+    plt.savefig("keb_fine_full.pdf")
+    #plt.show()
 
 if __name__ == "__main__":
     plt.style.use("bmh")
     #make_precdog_logs()
-    make_precdog_hi_logs()
+    #make_precdog_hi_logs()
+    make_keb_logs()
+    #make_keb_hi_logs()
     
 
 
