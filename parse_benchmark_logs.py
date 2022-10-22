@@ -71,7 +71,7 @@ def plot_entries(ax, entries, **plot_kwargs):
 def add_labels(ax):
     ax.set_xlabel("bandwidth")
     ax.set_ylabel("Time (ms)")
-    ax.set_title("Cholesky Performance on Kebnekaise")
+    #ax.set_title("Cholesky Performance on Kebnekaise")
     ax.legend()
 
 def make_precdog_logs():
@@ -86,18 +86,14 @@ def make_precdog_logs():
     plot_log_entries(log_names, labels)
 
 def make_keb_logs():
-    log_names = ["bench_logs_keb/keb_seq_mkl.log",
-                "bench_logs_keb/keb_mkl_14t.log",
-                "bench_logs_keb/keb_mkl_7t_numactl.log",
-                "bench_logs_keb/keb_par_fine_mkl_seq.log",
-                "bench_logs_keb/keb_par_blis_fine.log",
-                "bench_logs_keb/keb_par_mkl_7t_numactl.log"]
+    log_names = ["keb_logs/keb_seq_mkl_numactl.log",
+                "keb_logs/keb_mkl_14t_numactl.log",
+                "keb_logs/keb_par_mkl_fine_14t_numactl.log",
+                "keb_logs/keb_par_blis_fine_numactl.log"]
     labels = ["Sequential MKL",
               "MKL (14 threads)",
-              "MKL (7 threads) NUMA",
               "Task Parallel + MKL (14 threads)",
-              "Task Parallel + BLIS (14 threads)",
-              "Task Parallel + MKL (7 threads) NUMA"]
+              "Task Parallel + BLIS (14 threads)"]
     plot_log_entries(log_names, labels)
 
 def make_precdog_hi_logs():
@@ -112,15 +108,27 @@ def make_precdog_hi_logs():
     plot_log_entries(log_names, labels)
 
 def make_keb_hi_logs():
-    log_names = ["bench_logs_keb/keb_mkl_14t_hi.log",
-                 "bench_logs_keb/keb_plasma_hi.log",
-                 "bench_logs_keb/keb_par_fine_mkl_seq_hi.log",
-                 "bench_logs_keb/keb_par_blis_fine_hi.log"]
+    log_names = ["keb_logs/keb_mkl_28t_hi.log",
+                 "keb_logs/keb_plasma_hi_28t.log",
+                 "keb_logs/keb_par_fine_mkl_seq_hi.log",
+                 "keb_logs/keb_par_blis_fine_hi.log"]
+
+    labels = ["MKL (28 threads)", "PLASMA (28 threads)",
+              "Task Parallel + MKL (28 threads)",
+              "Task Parallel + BLIS (28 threads)"]
+    plot_log_entries(log_names, labels)
+
+def make_keb_hi_logs_numactl():
+    log_names = ["keb_logs/keb_mkl_14t_numactl_hi.log",
+                 "keb_logs/keb_plasma_hi_14t_numactl.log",
+                 "keb_logs/keb_par_fine_mkl_14t_numactl_hi.log",
+                 "keb_logs/keb_par_blis_fine_numactl_hi.log"]
 
     labels = ["MKL (14 threads)", "PLASMA (14 threads)",
               "Task Parallel + MKL (14 threads)",
               "Task Parallel + BLIS (14 threads)"]
     plot_log_entries(log_names, labels)
+
 
 def plot_log_entries(log_names, labels):
     markers = ["o", "x", "1", "2", "3", "."]
@@ -130,7 +138,7 @@ def plot_log_entries(log_names, labels):
         plot_entries(ax, entries_log_file, marker=markers[i], lw=0.5, label=label)
 
     add_labels(ax)
-    plt.savefig("keb_fine_full.pdf")
+    plt.savefig("keb_lo.pdf")
     #plt.show()
 
 if __name__ == "__main__":
@@ -139,6 +147,7 @@ if __name__ == "__main__":
     #make_precdog_hi_logs()
     make_keb_logs()
     #make_keb_hi_logs()
+    #make_keb_hi_logs_numactl()
     
 
 
