@@ -43,7 +43,7 @@ def parse_gbench_console_log(filename):
                 real_time = line.split()[1]
                 if bw not in entries:
                     entries[bw] = [0.0, 0.0]
-                
+
                 entries[bw][0] = real_time
             match_stddev = re.match(stddev_regex, line)
             if match_stddev:
@@ -65,8 +65,13 @@ def plot_entries(ax, entries, **plot_kwargs):
         stddevs.append(entries[str(bw)][1])
 
     real_times = list(map(float, real_times))
+    stddevs = list(map(float, stddevs))
+    stddevs_top = [m + stddev for (m, stddev) in zip(real_times, stddevs)]
+    stddevs_bot = [m - stddev for (m, stddev) in zip(real_times, stddevs)]
 
+    #ax.errorbar(bandwidths, real_times, yerr=stddevs, capsize=2.0, **plot_kwargs)
     ax.plot(bandwidths, real_times, **plot_kwargs)
+    ax.fill_between(bandwidths, stddevs_top, stddevs_bot, alpha=0.2)
 
 def add_labels(ax):
     ax.set_xlabel("bandwidth")
@@ -119,14 +124,14 @@ def make_keb_hi_logs():
     plot_log_entries(log_names, labels)
 
 def make_keb_hi_logs_numactl():
-    log_names = ["keb_logs/keb_mkl_14t_numactl_hi.log",
-                 "keb_logs/keb_plasma_hi_14t_numactl.log",
-                 "keb_logs/keb_par_fine_mkl_14t_numactl_hi.log",
-                 "keb_logs/keb_par_blis_fine_numactl_hi.log"]
+    log_names = ["bench_logs_keb/full_node/keb_mkl_28t_hi.log",
+                 "bench_logs_keb/full_node/keb_plasma_hi_28t.log",
+                 "bench_logs_keb/full_node/keb_par_fine_mkl_seq_hi.log",
+                 "bench_logs_keb/full_node/keb_par_blis_fine_hi.log"]
 
-    labels = ["MKL (14 threads)", "PLASMA (14 threads)",
-              "Task Parallel + MKL (14 threads)",
-              "Task Parallel + BLIS (14 threads)"]
+    labels = ["MKL (28 threads)", "PLASMA (28 threads)",
+              "Task Parallel + MKL (28 threads)",
+              "Task Parallel + BLIS (28 threads)"]
     plot_log_entries(log_names, labels)
 
 
@@ -145,10 +150,9 @@ if __name__ == "__main__":
     plt.style.use("bmh")
     #make_precdog_logs()
     #make_precdog_hi_logs()
-    make_keb_logs()
-    #make_keb_hi_logs()
-    #make_keb_hi_logs_numactl()
-    
+    #make_keb_logs()
+    make_keb_hi_logs()
+
 
 
 
