@@ -37,6 +37,14 @@ namespace {
     //Converts from (zero-indexed) 2D index to a 1D index for *COLUMN MAJOR* storage.
     inline int to_flat_index(int nrows, int row, int col) { return nrows * col + row; }
     inline int to_flat_index2(int nrows, int row, int col) { return nrows * (col - 1) + (row - 1); }
+
+    //Function to select a target block size for parallelization of a given matrix.
+    //Very crudely, the function tries to set the number of blocks to divide each window to
+    //satisfy the following:
+    //1) n- 1 should divide bandwidth
+    //2) n is such that the block size is approximately 50 by 50
+    //3) n is not greater than the number of physical cores on the system
+    //   (as reported by omp_get_max_threads)
     int calc_num_sub_blocks(int bandwidth) {
         constexpr int target_block_sz = 50;
         int levels = 0;
@@ -71,7 +79,8 @@ namespace {
             if (bandwidth % (levels - 1) == 0)
                 return levels;
         }
-        //In this case, accept the performance loss and just set the number of levels to three,
+        //If we still haven't found a suitable value,
+        //accept the performance loss and just set the number of levels to three,
         //with the assumption that the bandwidth is even
         assert(bandwidth % 2 == 0);
         return 3;
@@ -82,178 +91,24 @@ namespace {
 #endif
 }
 
-
-//Implementation is essentially a direct translation from the FORTRAN dpbtrf from Reference LAPACK on Netlib:
-//https://www.netlib.org/lapack/explore-html/da/dba/group__double_o_t_h_e_rcomputational_gad8b0e25cecc84ea3c5aa894ca1f1b5ca.html
-int par_dpbtrf(int mat_dim, int bandwidth, double* ab, int ldab) {
-    int status = 0;
-    //Check input values
-    if (mat_dim <= 0)
-        return -2;
-    if (bandwidth <= 0)
-        return -3;
-    if (ldab < (bandwidth + 1))
-        return -5;
-
-    const int nb = bandwidth / 2;
-    const int ld_work_arr = nb + 1;
-    std::vector<double> work_arr(nb * ld_work_arr); //Temporary array used during computations
-#pragma omp parallel num_threads(3) shared(work_arr, nb)
-{
-#pragma omp single nowait
-{
-    double* A22_start = nullptr;
-    double* A31_start = nullptr;
-    double* A32_start = nullptr;
-    double* A33_start = nullptr;
-    //Start of the chain:
-    for (int i = 0; i < mat_dim; i += nb) {
-        const int A11_width = std::min(nb, mat_dim - i);
-        double* A11_start = ab + to_flat_index(ldab, 0, i);
-        A22_start = nullptr;
-        A31_start = nullptr;
-        A32_start = nullptr;
-        A33_start = nullptr;
-        //Factorize A11 into U11
-        #pragma omp task depend(in:A22_start) depend(out:A11_start)
-#ifdef USE_BLIS
-        status = dpotrf_wrapper(LAPACK_COL_MAJOR, 'L', A11_width, A11_start, ldab - 1);
-#else
-        status = LAPACKE_dpotrf(LAPACK_COL_MAJOR, 'L', A11_width, A11_start, ldab - 1);
-#endif
-        /*if (status != 0)
-            return status;
-        */
-        if (i + A11_width < mat_dim) {
-            const int A22_width = std::min(bandwidth - A11_width, mat_dim - i - A11_width);
-            const int A33_width = std::min(A11_width, mat_dim - i - bandwidth);
-            double* A21_start = ab + to_flat_index(ldab, A11_width, i);
-            A22_start = ab + to_flat_index(ldab, 0, i + A11_width);
-
-            if (A22_width > 0) {
-                #pragma omp task depend(in:A11_start,A32_start) depend(out:A21_start) \
-                        firstprivate(A22_width, A11_width, A11_start, ldab, A21_start)
-                cblas_dtrsm(CblasColMajor, CblasRight, CblasLower, CblasTrans, CblasNonUnit,
-                            A22_width, A11_width, 1.0, A11_start, ldab - 1, A21_start, ldab - 1);
-
-                #pragma omp task depend(in:A21_start,A33_start) depend(out:A22_start) \
-                        firstprivate(A22_width, A11_width, A21_start, ldab, A22_start)
-                cblas_dsyrk(CblasColMajor, CblasLower, CblasNoTrans,
-                            A22_width, A11_width, -1.0, A21_start,
-                            ldab - 1, 1.0, A22_start, ldab - 1);
-            }
-
-            if (A33_width > 0) {
-                A31_start = ab + to_flat_index(ldab, bandwidth, i);
-                A32_start = ab + to_flat_index(ldab, bandwidth - A11_width, i + A11_width);
-                A33_start = ab + to_flat_index(ldab, 0, i + bandwidth);
-                #pragma omp task depend(out:work_arr) depend(in:A31_start)\
-                        firstprivate(ab, ld_work_arr, A11_width, A33_width, bandwidth, ldab)
-                {
-                //Copy the upper triangle of the A31 block into the temporary work array
-/*#ifdef USE_MKL_
-                    mkl_domatcopy('C', 'N', A33_width, A11_width, 1.0,
-                                  ab, A33_width, &work_arr[0], A33_width);
-#else*/
-                    for (int j = 0; j < A11_width; ++j) {
-                        const int k_max = std::min(j + 1, A33_width);
-                        for (int k = 0; k < k_max; ++k) {
-                            work_arr[to_flat_index(ld_work_arr, k, j)] =
-                                *(A31_start + to_flat_index(ldab, k - j, j));
-                        }
-                    }
-//#endif
-                }
-
-                #pragma omp task depend(in:A11_start) depend(inout:work_arr) \
-                        firstprivate(A33_width, A11_width, A11_start, ldab, ld_work_arr)
-                cblas_dtrsm(CblasColMajor, CblasRight, CblasLower, CblasTrans, CblasNonUnit,
-                            A33_width, A11_width, 1.0, A11_start, ldab - 1, &work_arr[0], ld_work_arr);
-
-                if (A22_width > 0) {
-                    #pragma omp task depend(in:A21_start,work_arr) depend(out:A32_start)\
-                            firstprivate(A33_width, A22_width, A11_width, \
-                                         ld_work_arr, A21_start, ldab, A32_start)
-                    {
-#ifdef USE_BLIS
-                    bli_dtrmm3(BLIS_LEFT, BLIS_UPPER, BLIS_NO_TRANSPOSE,
-                               BLIS_NONUNIT_DIAG, BLIS_TRANSPOSE,
-                               A33_width, A22_width, &MINUS_ONE_D,
-                               &work_arr[0], 1, ld_work_arr,
-                               A21_start, 1, ldab - 1,
-                               &ONE_D, A32_start, 1, ldab - 1);
-#else
-                    cblas_dgemm(CblasColMajor, CblasNoTrans, CblasTrans,
-                                A33_width, A22_width, A11_width,
-                                -1.0, &work_arr[0], ld_work_arr,
-                                A21_start, ldab - 1, 1.0,
-                                A32_start, ldab - 1);
-#endif
-                    }
-                }
-
-                #pragma omp task depend(in:work_arr) depend(out:A33_start) \
-                        firstprivate(A33_width, A11_width, A33_start, ldab, ld_work_arr)
-                cblas_dsyrk(CblasColMajor, CblasLower, CblasNoTrans,
-                            A33_width, A11_width, -1.0, &work_arr[0], ld_work_arr,
-                            1.0, A33_start, ldab - 1);
-
-                #pragma omp task depend(in:work_arr) depend(out:A31_start)\
-                        firstprivate(ab, ld_work_arr, A11_width, A33_width, bandwidth, ldab)
-                {
-                    //Copy back from work array to A31 upper triangle.
-/*#ifdef USE_MKL_
-                    mkl_domatcopy('C', 'N', A33_width, A11_width, 1.0,
-                                  &work_arr[0], A11_width, ab, A11_width);
-#else*/
-                    for (int j = 0; j < A11_width; ++j) {
-                        const int k_max = std::min(j + 1, A33_width);
-                        for (int k = 0; k < k_max; ++k) {
-                            *(A31_start + to_flat_index(ldab, k - j, j)) =
-                                work_arr[to_flat_index(ld_work_arr, k, j)];
-                        }
-                    }
-//#endif
-                }
-            }
-        }
-    }
-
-} //End OMP single
-} //End OMP parallel
-return status;
-}
-
-/*int par_fine_dpbtrf(int mat_dim, int bandwidth, double* ab, int ldab) {
-    const int levels = calc_num_sub_blocks(bandwidth);
-    const int status =  par_fine_dpbtrf(3, mat_dim, bandwidth, ab, ldab);
-    return status;
-}*/
-
 int par_fine_dpbtrf(int mat_dim, int bandwidth, double* ab, int ldab) {
     const int levels = calc_num_sub_blocks(bandwidth);
+    //Somewhat ugly solution for now, in the future should modify the sub block
+    //calculation to account for this...
     if (levels > MAX_LEVELS)
         return -1;
     const int nb = bandwidth / (levels - 1);
     const int ld_work_arr = nb + 1;
     std::vector<double> work_arr(nb * ld_work_arr);
-    //Array of pointers to the start of the sub-blocks in currently active window.
-    //We use this for organisation and to keep track of task dependencies
-    //We use a C-style array here, because that is what's compatible with OpenMP task dependencies.
+
+    //Dummy array used to specify the task dependencies.
+    //entry (i, j) in the array logically represents the sub-block
+    //at index (i, j) in the grid.
     char task_dep[MAX_LEVELS][MAX_LEVELS];
 #pragma omp parallel
 #pragma omp single
 {
-    /*double* block_starts[MAX_LEVELS][MAX_LEVELS];*/
     for (int i = 0; i < mat_dim; i += nb) {
-        /*//Fill the array of pointers to the starts of each sub-block
-        for (int block_row = 0; block_row < levels; ++block_row) {
-            for (int block_col = 0; block_col <= block_row; ++block_col) {
-                const int row_start = block_row * nb - block_col * nb;
-                const int col_start = i + block_col * nb;
-                block_starts[block_row][block_col] = ab + to_flat_index(ldab, row_start, col_start);
-            }
-        }*/
         const int A11_width = std::min(nb, mat_dim - i);
         double* A11_start = ab + to_flat_index(ldab, 0, i);
         #pragma omp task depend(out:task_dep[0][0]) depend(in: task_dep[1][1])
@@ -268,7 +123,7 @@ int par_fine_dpbtrf(int mat_dim, int bandwidth, double* ab, int ldab) {
             //Check to see if the next sub-block is past the bottom of the matrix
             if (nrows <= 0)
                 break;
-            
+
             double* Ai1_start = ab + to_flat_index(ldab, block_i * nb, i);
             #pragma omp task depend(in:task_dep[0][0], task_dep[block_i + 1][1]) \
                              depend(out: task_dep[block_i][0])

@@ -64,8 +64,6 @@ if (BC_USE_BLIS)
 
     add_library(lapack_wrapper STATIC lapack_wrapper.cpp lapack_wrapper.h)
     #Link in the external LAPACK to the wrapper. Use private to not link the main target to LAPACK too.
-    #If we want to use PLASMA for LAPACK, link it in here. For now, only support this with BLIS,
-    #since other BLAS:es will often define similar symbols and may be selected when running.
     target_link_libraries(lapack_wrapper PRIVATE BLAS::BLAS)
 
     target_link_libraries(band_cholesky_test PRIVATE lapack_wrapper)

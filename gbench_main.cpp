@@ -75,6 +75,9 @@ static void BM_Lapacke(benchmark::State& state) {
 #endif
     }
 }
+
+//Uncomment here for benchmarks of LAPACK implementations.
+
 //BENCHMARK(BM_Lapacke)->Iterations(10)->Repetitions(10)->Apply(custom_args);
 //BENCHMARK(BM_Lapacke)->Iterations(10)->Repetitions(10)->DenseRange(10, 100, 10);
 //BENCHMARK(BM_Lapacke)->Repetitions(10)->DenseRange(50, 200, 10)->UseRealTime();
@@ -98,6 +101,8 @@ static void BM_par_pbtrf(benchmark::State& state) {
                         static_cast<int>(mat.bandwidth + 1));
     }
 }
+
+//Uncomment here for benchmarks of the task parallel Cholesky
 //BENCHMARK(BM_par_pbtrf)->Iterations(10)->Repetitions(10)->Apply(custom_args);
 //BENCHMARK(BM_par_pbtrf)->Repetitions(10)->DenseRange(50, 200, 10)->UseRealTime();
 //BENCHMARK(BM_par_pbtrf)->Repetitions(10)->DenseRange(200, 500, 100)->UseRealTime();
@@ -108,7 +113,7 @@ BENCHMARK(BM_par_pbtrf)->Iterations(10)->Arg(200)->UseRealTime();
 void verify_factorization() {
     PB_matrix<double> mat = get_random_pd_bandmat<double>(default_dim, 100);
     PB_matrix<double> mat_cpy = mat;
-    
+
 #ifdef USE_BLIS
     dpbtrf_wrapper(LAPACK_COL_MAJOR, 'L',
                    static_cast<int>(mat.size),

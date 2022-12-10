@@ -39,6 +39,9 @@ int PB_matrix<ValueType>::get_flat_index(int row, int col) const {
     return col * (this->bandwidth + 1) + bandoffset;
 }
 
+/*
+ * Helper function to read a matrix stored in binary format to file
+ * */
 template <typename ValueType>
 PB_matrix<ValueType> read_pb_matrix(const std::string& path)
 {
