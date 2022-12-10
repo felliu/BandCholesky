@@ -3,7 +3,7 @@
 #include "par_cholesky.h"
 #if defined USE_MKL_
 #include <mkl.h>
-#elif defined USE_BLIS
+#elif defined USE_BLIS_
 #include <blis/blis.h>
 #else
 #include <cblas.h>
@@ -11,14 +11,14 @@
 
 #ifdef USE_PLASMA_
 #include "plasma.h"
-#elif !defined(USE_MKL_) && !defined(USE_BLIS)
+#elif !defined(USE_MKL_) && !defined(USE_BLIS_)
 #include <lapacke.h>
 #endif
 
 //When using BLIS, we use wrapper functions for LAPACK routines to not
 //interfere with definitions of the LAPACK routines from the BLAS implementation.
 //Those wrapper functions are declared in the header below
-#ifdef USE_BLIS
+#ifdef USE_BLIS_
 #include "lapack_wrapper.h"
 #endif
 
@@ -53,7 +53,7 @@ static void BM_Lapacke(benchmark::State& state) {
         state.PauseTiming();
         mat = mat_cpy;
         state.ResumeTiming();
-#if defined USE_BLIS
+#if defined USE_BLIS_
         dpbtrf_wrapper(LAPACK_COL_MAJOR, 'L',
                        static_cast<int>(mat.size),
                        static_cast<int>(mat.bandwidth),
@@ -107,14 +107,15 @@ static void BM_par_pbtrf(benchmark::State& state) {
 //BENCHMARK(BM_par_pbtrf)->Repetitions(10)->DenseRange(50, 200, 10)->UseRealTime();
 //BENCHMARK(BM_par_pbtrf)->Repetitions(10)->DenseRange(200, 500, 100)->UseRealTime();
 //BENCHMARK(BM_par_pbtrf)->Iterations(1)->Arg(1600)->UseRealTime();
-BENCHMARK(BM_par_pbtrf)->Iterations(10)->Arg(200)->UseRealTime();
+//BENCHMARK(BM_par_pbtrf)->Iterations(10)->Arg(200)->UseRealTime();
+BENCHMARK(BM_par_pbtrf)->Repetitions(10)->Arg(200)->UseRealTime();
 //BENCHMARK(BM_par_pbtrf)->Repetitions(10)->DenseRange(200, 2000, 100)->UseRealTime();
 
 void verify_factorization() {
     PB_matrix<double> mat = get_random_pd_bandmat<double>(default_dim, 100);
     PB_matrix<double> mat_cpy = mat;
 
-#ifdef USE_BLIS
+#ifdef USE_BLIS_
     dpbtrf_wrapper(LAPACK_COL_MAJOR, 'L',
                    static_cast<int>(mat.size),
                    static_cast<int>(mat.bandwidth),
@@ -142,7 +143,7 @@ void verify_factorization() {
 }
 
 int main(int argc, char** argv) {
-#ifdef USE_BLIS
+#ifdef USE_BLIS_
     bli_init();
 #endif
 #ifdef USE_PLASMA_
@@ -155,7 +156,7 @@ int main(int argc, char** argv) {
 #ifdef USE_PLASMA_
     plasma_finalize();
 #endif
-#ifdef USE_BLIS
+#ifdef USE_BLIS_
     bli_finalize();
 #endif
     //verify_factorization();

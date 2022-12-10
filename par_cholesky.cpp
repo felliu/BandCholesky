@@ -9,7 +9,7 @@
 #ifdef USE_MKL_
 #include <mkl.h>
 #else
-#ifdef USE_BLIS
+#ifdef USE_BLIS_
 #include <blis/blis.h>
 #include <blis/cblas.h>
 #else
@@ -20,7 +20,7 @@
 
 #include <omp.h>
 
-#if defined USE_PLASMA_ || defined USE_BLIS
+#if defined USE_PLASMA_ || defined USE_BLIS_
 #include "lapack_wrapper.h"
 #endif
 
@@ -85,13 +85,16 @@ namespace {
         assert(bandwidth % 2 == 0);
         return 3;
     }
-#ifdef USE_BLIS
+#ifdef USE_BLIS_
     double MINUS_ONE_D = -1.0;
     double ONE_D = 1.0;
 #endif
 }
 
 int par_fine_dpbtrf(int mat_dim, int bandwidth, double* ab, int ldab) {
+#ifdef USE_MKL_
+    LAPACKE_set_nancheck(0);
+#endif
     const int levels = calc_num_sub_blocks(bandwidth);
     //Somewhat ugly solution for now, in the future should modify the sub block
     //calculation to account for this...
@@ -112,7 +115,7 @@ int par_fine_dpbtrf(int mat_dim, int bandwidth, double* ab, int ldab) {
         const int A11_width = std::min(nb, mat_dim - i);
         double* A11_start = ab + to_flat_index(ldab, 0, i);
         #pragma omp task depend(out:task_dep[0][0]) depend(in: task_dep[1][1])
-#ifdef USE_BLIS
+#ifdef USE_BLIS_
         dpotrf_wrapper(LAPACK_COL_MAJOR, 'L', A11_width, A11_start, ldab - 1);
 #else
         LAPACKE_dpotrf(LAPACK_COL_MAJOR, 'L', A11_width, A11_start, ldab - 1);
