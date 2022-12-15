@@ -1,5 +1,0 @@
-band_cholesky_test
-*.o
-build*/*
-*.sh
-compile_commands.json
