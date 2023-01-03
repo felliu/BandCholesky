@@ -1,6 +1,9 @@
 #ifndef RUN_BENCHMARKS_H
 #define RUN_BENCHMARKS_H
 
+//Provides functions for running simple benchmarks without Google benchmark.
+//No longer used.
+
 #include "PB_matrix.h"
 #ifdef USE_MKL_
 #include <mkl.h>
