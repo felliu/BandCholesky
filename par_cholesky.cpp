@@ -96,6 +96,7 @@ int par_fine_dpbtrf(int mat_dim, int bandwidth, double* ab, int ldab) {
     LAPACKE_set_nancheck(0);
 #endif
     const int levels = calc_num_sub_blocks(bandwidth);
+    const int threads = std::min(levels, omp_get_max_threads());
     //Somewhat ugly solution for now, in the future should modify the sub block
     //calculation to account for this...
     if (levels > MAX_LEVELS)
@@ -108,7 +109,7 @@ int par_fine_dpbtrf(int mat_dim, int bandwidth, double* ab, int ldab) {
     //entry (i, j) in the array logically represents the sub-block
     //at index (i, j) in the grid.
     char task_dep[MAX_LEVELS][MAX_LEVELS];
-#pragma omp parallel
+#pragma omp parallel num_threads(levels)
 #pragma omp single
 {
     for (int i = 0; i < mat_dim; i += nb) {

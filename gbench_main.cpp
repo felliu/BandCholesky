@@ -104,11 +104,11 @@ static void BM_par_pbtrf(benchmark::State& state) {
 
 //Uncomment here for benchmarks of the task parallel Cholesky
 //BENCHMARK(BM_par_pbtrf)->Iterations(10)->Repetitions(10)->Apply(custom_args);
-//BENCHMARK(BM_par_pbtrf)->Repetitions(10)->DenseRange(50, 200, 10)->UseRealTime();
+BENCHMARK(BM_par_pbtrf)->Repetitions(10)->DenseRange(50, 200, 10)->UseRealTime();
 //BENCHMARK(BM_par_pbtrf)->Repetitions(10)->DenseRange(200, 500, 100)->UseRealTime();
 //BENCHMARK(BM_par_pbtrf)->Iterations(1)->Arg(1600)->UseRealTime();
 //BENCHMARK(BM_par_pbtrf)->Iterations(10)->Arg(200)->UseRealTime();
-BENCHMARK(BM_par_pbtrf)->Repetitions(10)->Arg(200)->UseRealTime();
+//BENCHMARK(BM_par_pbtrf)->Repetitions(10)->Arg(200)->UseRealTime();
 //BENCHMARK(BM_par_pbtrf)->Repetitions(10)->DenseRange(200, 2000, 100)->UseRealTime();
 
 void verify_factorization() {
