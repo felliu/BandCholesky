@@ -79,6 +79,10 @@ static void BM_Lapacke(benchmark::State& state) {
 //Uncomment here for benchmarks of LAPACK implementations.
 
 BENCHMARK(BM_Lapacke)->Repetitions(10)->DenseRange(50, 200, 10)->UseRealTime();
+//BENCHMARK(BM_Lapacke)->Iterations(10)->Repetitions(10)->Apply(custom_args);
+//BENCHMARK(BM_Lapacke)->Iterations(10)->Repetitions(10)->DenseRange(10, 100, 10);
+//BENCHMARK(BM_Lapacke)->Repetitions(10)->DenseRange(50, 200, 10)->UseRealTime();
+//BENCHMARK(BM_Lapacke)->Repetitions(10)->Arg(100)->UseRealTime();
 //BENCHMARK(BM_Lapacke)->Repetitions(10)->DenseRange(200, 2000, 100)->UseRealTime();
 
 static void BM_par_pbtrf(benchmark::State& state) {
