@@ -64,10 +64,9 @@ endif()
 
 
 #We want to be able to run with both GNU OpenMP and Intel OpenMP, handle that here
-#first try to find IntelOpenMP
-find_library(IntelOpenMP NAMES iomp5
+if (BC_USE_IOMP)
+    find_library(IntelOpenMP NAMES iomp5
              HINTS ENV LIBRARY_PATH)
-if (IntelOpenMP)
     target_link_libraries(par_band_cholesky PRIVATE ${IntelOpenMP})
     message(STATUS "Expecting IntelOpenMP: ${IntelOpenMP}")
 else()

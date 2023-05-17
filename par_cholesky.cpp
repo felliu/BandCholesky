@@ -96,7 +96,7 @@ int par_fine_dpbtrf(int mat_dim, int bandwidth, double* ab, int ldab) {
     LAPACKE_set_nancheck(0);
 #endif
     const int levels = calc_num_sub_blocks(bandwidth);
-    const int threads = std::min(levels, omp_get_max_threads());
+    const int threads = std::min(2*levels, omp_get_max_threads());
     //Somewhat ugly solution for now, in the future should modify the sub block
     //calculation to account for this...
     if (levels > MAX_LEVELS)
