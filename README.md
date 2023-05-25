@@ -5,6 +5,9 @@ An implementation of Cholesky factorization of banded matrices using OpenMP task
 A working BLAS installation is needed, as well as the LAPACK routine `dpotrf`. The CMake build system tries to find these based on the users preference (more details in the build section).
 The most complicated backend for this that we've found is BLIS, since it doesn't provide `dpotrf` natively.
 
+## Git Submodules
+The Google Benchmark library (see section below) is included as a Git submodule. To fetch it after cloning run `git submodule update --init --recursive`.
+
 ## Build
 Building is done in a traditional CMake fashion
 
@@ -20,7 +23,7 @@ For example to build using Intel MKL as a backend:
 
 `mkdir build && cd build`
 
-`cmake -DBLA_VENDOR=Intel10_64lp_seq -DCMAKE_BUILD_TYPE=Release -DBC_USE_IOMP ..`
+`cmake -DBLA_VENDOR=Intel10_64lp_seq -DCMAKE_BUILD_TYPE=Release -DBC_USE_IOMP=True ..`
 
 `cmake --build .`
 
