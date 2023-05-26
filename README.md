@@ -6,7 +6,7 @@ A working BLAS installation is needed, as well as the LAPACK routine `dpotrf`. T
 The most complicated backend for this that we've found is BLIS, since it doesn't provide `dpotrf` natively.
 
 ## Git Submodules
-The Google Benchmark library (see section below) is included as a Git submodule. To fetch it after cloning run `git submodule update --init --recursive` from within the cloned directory.
+The Google Benchmark library (see section below) is included as a Git submodule. To fetch it after cloning, first navigate to the cloned directory then run `git submodule update --init --recursive`.
 
 ## Build
 Building is done in a traditional CMake fashion
